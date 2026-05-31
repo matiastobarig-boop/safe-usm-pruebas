@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeUSM</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <link rel="stylesheet" href="styles.css?v=7">
+</head>
+
+<body>
+    <!-- Elementos de fondo decorativos -->
+    <div class="bg-shape shape-1"></div>
+    <div class="bg-shape shape-2"></div>
+
+    <main class="container">
+        <div class="glass-panel main-panel">
+            <h1 class="title">SafeUSM</h1>
+            <p class="subtitle">Tu seguridad es nuestra prioridad</p>
+
+            <div class="user-actions">
+            <!-- Botón de Configuración / Accesibilidad -->
+            <button id="btn-settings" class="icon-btn" title="Configuración de Accesibilidad">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+            </button>
+            
+            <!-- Botones de sesión (Desactivados temporalmente) -->
+            <!-- <span id="user-email" class="user-email" style="display: none;"></span>
+            <button id="btn-logout" class="logout-btn" style="display: none;">Cerrar Sesión</button> -->
+            <button id="btn-login" class="icon-btn" title="Iniciar Sesión" style="display: none;">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                </svg>
+            </button>
+        </div>
+
+            <!-- Sección de Login (Desactivada temporalmente para pruebas) -->
+            <div id="login-section" class="login-section" style="display: none;">
+                <p>Inicia sesión con tu correo @usm.cl para poder enviar reportes.</p>
+                <button id="btn-login" class="login-btn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                        <polyline points="10 17 15 12 10 7"></polyline>
+                        <line x1="15" y1="12" x2="3" y2="12"></line>
+                    </svg>
+                    Iniciar Sesión con Google
+                </button>
+            </div>
+
+            <!-- Información del Usuario (Se muestra cuando hay sesión) -->
+            <div id="user-info-section" class="user-info" style="display: none;">
+                <p id="user-email">Cargando usuario...</p>
+                <button id="btn-logout" class="logout-btn">Cerrar Sesión</button>
+            </div>
+
+            <div id="upload-container" class="upload-container">
+                <!-- Botones de Foto: Cámara + Galería -->
+                <div class="photo-buttons-row">
+                    <!-- Botón Cámara -->
+                    <div class="photo-upload-wrapper">
+                        <input type="file" id="camera-upload" accept="image/*" capture="environment" class="upload-input">
+                        <label for="camera-upload" class="upload-btn camera-btn">
+                            <svg class="upload-icon" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                <circle cx="12" cy="13" r="4"></circle>
+                            </svg>
+                            <span>Tomar Foto</span>
+                        </label>
+                    </div>
+                    <!-- Botón Galería -->
+                    <div class="photo-upload-wrapper">
+                        <input type="file" id="photo-upload" accept="image/*" class="upload-input">
+                        <label for="photo-upload" class="upload-btn gallery-btn">
+                            <svg class="upload-icon" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                <polyline points="21 15 16 10 5 21"></polyline>
+                            </svg>
+                            <span>Elegir de Galería</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Contenedor de Vista Previa de Imagen -->
+                <div id="image-preview-container" class="image-preview-container" style="display: none;">
+                    <img id="image-preview" src="" alt="Vista previa de la foto" class="image-preview-img">
+                    <button id="btn-remove-photo" class="remove-photo-btn" type="button" title="Quitar foto">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Cuadro de Comentario -->
+                <div class="input-group">
+                    <textarea id="user-comment" class="input-field"
+                        placeholder="Describe lo que sucede en la foto..."></textarea>
+                </div>
+
+                <!-- Mapa para seleccionar ubicación -->
+                <div class="map-section">
+                    <p class="section-label">Indica la ubicación del incidente:</p>
+                    <div id="form-map" class="map-container"></div>
+                    <button id="btn-location" class="location-btn" type="button">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                        Usar mi ubicación actual
+                    </button>
+                    <p id="location-status" class="location-status"></p>
+                </div>
+
+                <!-- Selectores de Categoría -->
+                <div class="category-selector">
+                    <p class="section-label">Selecciona una Categoría:</p>
+                    <div class="category-buttons">
+                        <button type="button" class="cat-btn" data-category="Seguridad">
+                            <span class="cat-dot" style="background-color: var(--danger);"></span> Seguridad
+                        </button>
+                        <button type="button" class="cat-btn" data-category="Salud">
+                            <span class="cat-dot" style="background-color: var(--success);"></span> Salud
+                        </button>
+                        <button type="button" class="cat-btn" data-category="Equidad de Género">
+                            <span class="cat-dot" style="background-color: var(--purple);"></span> Equidad de Género
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Botón Final -->
+                <button id="send-btn" class="send-btn">
+                    <span>Publicar Reporte</span>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="reports-header">
+                <h2>Mapa General y Reportes Activos</h2>
+            </div>
+            
+            <!-- Controles de Filtros Dinámicos -->
+            <div class="filters-container glass-panel" style="margin-bottom: 1.5rem; padding: 15px;">
+                <p class="section-label" style="margin-top: 0; margin-bottom: 10px; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary);">Filtrar Reportes:</p>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <!-- Filtro por Categorías -->
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        <button type="button" class="filter-btn active" data-filter-type="category" data-filter-val="all">Todos</button>
+                        <button type="button" class="filter-btn" data-filter-type="category" data-filter-val="Seguridad">
+                            <span class="cat-dot" style="background-color: var(--danger); width: 8px; height: 8px;"></span> Seguridad
+                        </button>
+                        <button type="button" class="filter-btn" data-filter-type="category" data-filter-val="Salud">
+                            <span class="cat-dot" style="background-color: var(--success); width: 8px; height: 8px;"></span> Salud
+                        </button>
+                        <button type="button" class="filter-btn" data-filter-type="category" data-filter-val="Equidad de Género">
+                            <span class="cat-dot" style="background-color: var(--purple); width: 8px; height: 8px;"></span> Equidad de Género
+                        </button>
+                    </div>
+                    <!-- Filtros Especiales -->
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 10px;">
+                        <button type="button" class="filter-btn" data-filter-type="special" data-filter-val="today">📅 Reportes de Hoy</button>
+                        <button type="button" class="filter-btn" data-filter-type="special" data-filter-val="active">🔥 Más Confirmados (Urgentes)</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Mapa Global -->
+            <div id="global-map" class="global-map-container glass-panel" style="padding: 0; overflow: hidden; margin-bottom: 2rem;"></div>
+
+            <div id="preview-container" class="preview-grid">
+                <!-- Aquí se inyectan los reportes -->
+            </div>
+        </div>
+    </main>
+
+    <!-- IMPORTANTE: Aquí van los scripts de Firebase antes de tu script.js -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- SweetAlert2 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- Webcam Modal para PC -->
+    <div id="webcam-modal" class="webcam-modal" style="display: none;">
+        <div class="webcam-content glass-panel">
+            <h3 style="color: white; margin-bottom: 1rem; text-align: center; font-weight: 600;">Tomar Foto (PC)</h3>
+            <div class="webcam-video-container">
+                <video id="webcam-video" autoplay playsinline></video>
+                <canvas id="webcam-canvas" style="display: none;"></canvas>
+            </div>
+            <div style="display: flex; gap: 1rem; margin-top: 1.5rem; justify-content: center; width: 100%;">
+                <button id="btn-capture-webcam" class="send-btn" style="margin-top: 0; padding: 0.75rem 1.5rem; border-radius: 12px; font-size: 1rem; flex: 1;">
+                    Capturar
+                </button>
+                <button id="btn-close-webcam" class="logout-btn" style="padding: 0.75rem 1.5rem; font-weight: 500; font-size: 1rem; flex: 1;">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Accessibility Modal -->
+    <div id="accessibility-modal" class="webcam-modal" style="display: none;">
+        <div class="webcam-content glass-panel" style="max-width: 400px; padding: 2rem;">
+            <h3 style="color: var(--text-primary); margin-bottom: 0.5rem; text-align: center; font-weight: 600; font-size: 1.25rem;">Accesibilidad</h3>
+            <p style="color: var(--text-secondary); text-align: center; margin-bottom: 1.5rem; font-size: 0.9rem; line-height: 1.4;">Selecciona un modo visual para adaptar la interfaz a tus necesidades.</p>
+            
+            <div class="accessibility-options" style="display: flex; flex-direction: column; gap: 0.75rem; width: 100%;">
+                <button class="access-btn active" data-theme="default">Oscuro (Por defecto)</button>
+                <button class="access-btn" data-theme="light">Claro</button>
+                <button class="access-btn" data-theme="low-vision">Alto Contraste / Baja Visión</button>
+                <button class="access-btn" data-theme="achromatopsia">Monocromático</button>
+                <button class="access-btn" data-theme="daltonism">Daltonismo (Wong)</button>
+                <button class="access-btn" data-theme="photophobia">Fotofobia (Luz Cálida)</button>
+            </div>
+
+            <div style="margin-top: 1.5rem; width: 100%;">
+                <button id="btn-close-accessibility" class="logout-btn" style="width: 100%; padding: 0.75rem; font-weight: 500; font-size: 1rem;">Cerrar Configuración</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js?v=8"></script>
+</body>
+
+</html>
