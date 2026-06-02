@@ -96,41 +96,99 @@ auth.onAuthStateChanged(user => {
 // Forzamos el nombre de usuario para que no falle el reporte mientras probamos sin login
 currentUserEmail = "usuario_de_prueba@sansano.usm.cl";
 
+// --- FUNCIÓN AUXILIAR: PUNTO EN POLÍGONO (Ray-casting Algorithm) ---
+function isPointInPolygon(lat, lng, polygon) {
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const latI = polygon[i][0];
+        const lngI = polygon[i][1];
+        const latJ = polygon[j][0];
+        const lngJ = polygon[j][1];
+        
+        const intersect = ((lngI > lng) !== (lngJ > lng))
+            && (lat < (latJ - latI) * (lng - lngI) / (lngJ - lngI) + latI);
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+
 // --- MAPAS LEAFLET ---
-const usmSanJoaquin = [-33.4933, -70.6150];
+const usmSanJoaquin = [-33.4906, -70.6192]; // Centro real del Campus San Joaquín
 let currentLat = usmSanJoaquin[0];
 let currentLng = usmSanJoaquin[1];
 
-// Límites geográficos para restringir el mapa al área general del campus y alrededores (San Joaquín, desplazado al oeste)
+// Límites geográficos estrictos del campus San Joaquín
 const boundsSanJoaquin = L.latLngBounds(
-    L.latLng(-33.5000, -70.6257), // Esquina Suroeste
-    L.latLng(-33.4866, -70.6123)  // Esquina Noreste
+    L.latLng(-33.4925, -70.6218), // Esquina Suroeste
+    L.latLng(-33.4887, -70.6166)  // Esquina Noreste
 );
 
-// Opciones de configuración para restringir la navegación
+// Opciones de configuración para restringir la navegación al campus
 const mapOptions = {
     maxBounds: boundsSanJoaquin,
-    maxBoundsViscosity: 1.0, // Impide arrastrar el mapa fuera de los límites definidos
-    minZoom: 15,             // Impide alejarse demasiado (evita ver todo el país)
+    maxBoundsViscosity: 1.0, // Impide arrastrar el mapa fuera de los límites
+    minZoom: 17,             // Restringe zoom hacia afuera para mantener el campus en pantalla
     maxZoom: 19              // Límite de zoom de acercamiento
 };
 
+// Coordenadas del polígono del límite del campus (según OSM way 157450164)
+const campusCoordinates = [
+    [-33.4899900, -70.6205564],
+    [-33.4899363, -70.6202862],
+    [-33.4897656, -70.6203226],
+    [-33.4894393, -70.6183822],
+    [-33.4905566, -70.6181177],
+    [-33.4915911, -70.6179077],
+    [-33.4916687, -70.6180900],
+    [-33.4917169, -70.6183798],
+    [-33.4917723, -70.6188565],
+    [-33.4917415, -70.6198651],
+    [-33.4905671, -70.6201173],
+    [-33.4905269, -70.6204940],
+    [-33.4903703, -70.6204726],
+    [-33.4899900, -70.6205564]
+];
+
 // 1. Mapa del Formulario
-const formMap = L.map('form-map', mapOptions).setView(usmSanJoaquin, 16);
+const formMap = L.map('form-map', mapOptions).setView(usmSanJoaquin, 17);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
     attribution: '© OpenStreetMap'
+}).addTo(formMap);
+
+// Polígono del campus en el mapa del formulario
+L.polygon(campusCoordinates, {
+    color: '#3b82f6',
+    fillColor: '#3b82f6',
+    fillOpacity: 0.08,
+    weight: 2,
+    dashArray: '5, 8'
 }).addTo(formMap);
 
 const formMarker = L.marker(usmSanJoaquin, {draggable: true}).addTo(formMap);
 formMarker.on('dragend', function(e) {
     const pos = formMarker.getLatLng();
-    currentLat = pos.lat;
-    currentLng = pos.lng;
+    // Validar que el marcador arrastrado esté dentro del polígono del campus (zona azul)
+    if (isPointInPolygon(pos.lat, pos.lng, campusCoordinates)) {
+        currentLat = pos.lat;
+        currentLng = pos.lng;
+    } else {
+        // Devolver el marcador al centro si se arrastra fuera
+        formMarker.setLatLng(usmSanJoaquin);
+        currentLat = usmSanJoaquin[0];
+        currentLng = usmSanJoaquin[1];
+        Swal.fire('Ubicación Inválida', 'Por favor, arrastra el marcador dentro del área del campus delimitada en azul.', 'warning');
+    }
 });
+
 formMap.on('click', function(e) {
-    formMarker.setLatLng(e.latlng);
-    currentLat = e.latlng.lat;
-    currentLng = e.latlng.lng;
+    // Validar que el clic esté dentro del polígono del campus (zona azul)
+    if (isPointInPolygon(e.latlng.lat, e.latlng.lng, campusCoordinates)) {
+        formMarker.setLatLng(e.latlng);
+        currentLat = e.latlng.lat;
+        currentLng = e.latlng.lng;
+    } else {
+        Swal.fire('Ubicación Inválida', 'Debes hacer clic dentro de la zona del campus delimitada en azul.', 'warning');
+    }
 });
 
 // Botón de Geolocalización
@@ -141,12 +199,20 @@ btnLocation.addEventListener('click', () => {
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
             (position) => {
-                currentLat = position.coords.latitude;
-                currentLng = position.coords.longitude;
-                const newPos = [currentLat, currentLng];
-                formMap.setView(newPos, 18);
-                formMarker.setLatLng(newPos);
-                locationStatus.textContent = "Ubicación obtenida.";
+                const userLat = position.coords.latitude;
+                const userLng = position.coords.longitude;
+                // Validar que la ubicación geolocalizada esté dentro del polígono del campus
+                if (isPointInPolygon(userLat, userLng, campusCoordinates)) {
+                    currentLat = userLat;
+                    currentLng = userLng;
+                    const newPos = [currentLat, currentLng];
+                    formMap.setView(newPos, 18);
+                    formMarker.setLatLng(newPos);
+                    locationStatus.textContent = "Ubicación obtenida.";
+                } else {
+                    locationStatus.textContent = "Ubicación fuera del campus.";
+                    Swal.fire('Ubicación Fuera de Rango', 'Tu ubicación actual está fuera del área del campus delimitada en azul. El marcador se mantendrá en el centro del campus.', 'warning');
+                }
             },
             (error) => {
                 locationStatus.textContent = "Error al obtener ubicación.";
@@ -159,11 +225,129 @@ btnLocation.addEventListener('click', () => {
 });
 
 // 2. Mapa Global (Dashboard)
-const globalMap = L.map('global-map', mapOptions).setView(usmSanJoaquin, 16);
+const globalMap = L.map('global-map', mapOptions).setView(usmSanJoaquin, 17);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
     attribution: '© OpenStreetMap'
 }).addTo(globalMap);
+
+// Polígono del campus en el mapa global
+L.polygon(campusCoordinates, {
+    color: '#3b82f6',
+    fillColor: '#3b82f6',
+    fillOpacity: 0.08,
+    weight: 2,
+    dashArray: '5, 8'
+}).addTo(globalMap);
+
 let globalMarkers = []; // Array para guardar los pines actuales
+
+// --- NAVEGACIÓN ENTRE PÁGINAS (SPA) ---
+const pageHome = document.getElementById('page-home');
+const pageReportForm = document.getElementById('page-report-form');
+const pageReportsList = document.getElementById('page-reports-list');
+const pageLoginCustom = document.getElementById('page-login-custom');
+const pageCredentialsList = document.getElementById('page-credentials-list');
+
+const btnGotoReport = document.getElementById('btn-goto-report');
+const btnGotoList = document.getElementById('btn-goto-list');
+const btnHomeLogin = document.getElementById('btn-home-login');
+const btnGotoCredentials = document.getElementById('btn-goto-credentials');
+const btnBackCredentials = document.getElementById('btn-back-credentials');
+const backBtns = document.querySelectorAll('.back-btn');
+
+function navigateTo(pageId) {
+    // Ocultar todas las páginas
+    [pageHome, pageReportForm, pageReportsList, pageLoginCustom, pageCredentialsList].forEach(page => {
+        if (page) {
+            page.style.display = 'none';
+            page.classList.remove('active');
+        }
+    });
+
+    // Mostrar la página destino
+    const targetPage = document.getElementById(pageId);
+    if (targetPage) {
+        targetPage.style.display = 'flex';
+        targetPage.classList.add('active');
+
+        // Toggle visibilidad del botón de cerrar sesión custom en la Página 4
+        if (pageId === 'page-login-custom') {
+            const btnCustomLogout = document.getElementById('btn-custom-logout');
+            if (btnCustomLogout) {
+                if (localStorage.getItem('custom-user-email')) {
+                    btnCustomLogout.style.display = 'inline-flex';
+                } else {
+                    btnCustomLogout.style.display = 'none';
+                }
+            }
+        }
+
+        // Invalidar tamaños de mapas según corresponda (crítico para Leaflet)
+        if (pageId === 'page-reports-list' && typeof globalMap !== 'undefined') {
+            setTimeout(() => {
+                globalMap.invalidateSize();
+            }, 100);
+        } else if (pageId === 'page-report-form' && typeof formMap !== 'undefined') {
+            setTimeout(() => {
+                formMap.invalidateSize();
+            }, 100);
+        }
+    }
+}
+
+if (btnGotoReport) {
+    btnGotoReport.addEventListener('click', () => navigateTo('page-report-form'));
+}
+if (btnGotoList) {
+    btnGotoList.addEventListener('click', () => navigateTo('page-reports-list'));
+}
+if (btnHomeLogin) {
+    btnHomeLogin.addEventListener('click', () => navigateTo('page-login-custom'));
+}
+if (btnGotoCredentials) {
+    btnGotoCredentials.addEventListener('click', () => {
+        Swal.fire({
+            title: 'Acceso Restringido',
+            text: 'Ingresa la contraseña de administrador para ver el registro:',
+            input: 'password',
+            inputAttributes: {
+                autocapitalize: 'off',
+                autocorrect: 'off'
+            },
+            showCancelButton: true,
+            confirmButtonText: 'Entrar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#3b82f6',
+            background: 'rgba(15, 23, 42, 0.9)'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                if (result.value === '9876') {
+                    navigateTo('page-credentials-list');
+                } else {
+                    Swal.fire({
+                        title: 'Acceso Denegado',
+                        text: 'Contraseña incorrecta.',
+                        icon: 'error',
+                        confirmButtonColor: '#3b82f6',
+                        background: 'rgba(15, 23, 42, 0.9)'
+                    }).then(() => {
+                        navigateTo('page-home');
+                    });
+                }
+            } else {
+                navigateTo('page-home');
+            }
+        });
+    });
+}
+if (btnBackCredentials) {
+    btnBackCredentials.addEventListener('click', () => navigateTo('page-login-custom'));
+}
+backBtns.forEach(btn => {
+    if (btn.id !== 'btn-back-credentials') {
+        btn.addEventListener('click', () => navigateTo('page-home'));
+    }
+});
 
 let isFirstLoad = true; // Para no lanzar alertas al cargar la página por primera vez
 const btnEnviar = document.getElementById('send-btn');
@@ -186,6 +370,12 @@ botonesCategoria.forEach(boton => {
 });
 
 btnEnviar.addEventListener('click', async () => {
+    // Validar que la ubicación esté estrictamente dentro del polígono del campus (zona azul)
+    if (!isPointInPolygon(currentLat, currentLng, campusCoordinates)) {
+        Swal.fire('Ubicación Inválida', 'No puedes publicar el reporte si el marcador no está dentro del campus de la universidad (delimitado en azul).', 'error');
+        return;
+    }
+
     const comentario = inputComentario.value;
     const file = fileInput.files[0];
 
@@ -218,6 +408,8 @@ btnEnviar.addEventListener('click', async () => {
         // 2. Obtener la URL de descarga real
         const urlDescarga = await fileRef.getDownloadURL();
 
+        const activeUser = localStorage.getItem('custom-user-email') || currentUserEmail;
+
         // 3. Guardar en la colección "reportes" de Firestore
         await db.collection("reportes").add({
             texto: comentario,
@@ -226,7 +418,7 @@ btnEnviar.addEventListener('click', async () => {
             fotoUrl: urlDescarga,
             latitud: currentLat,
             longitud: currentLng,
-            autor: currentUserEmail
+            autor: activeUser
         });
         
         Swal.fire({
@@ -235,6 +427,8 @@ btnEnviar.addEventListener('click', async () => {
             icon: 'success',
             confirmButtonColor: '#3b82f6',
             background: 'rgba(15, 23, 42, 0.9)'
+        }).then(() => {
+            navigateTo('page-reports-list');
         });
         
         // Limpiamos los campos
@@ -774,7 +968,7 @@ btnRemovePhoto.addEventListener('click', () => {
 });
 
 // --- LÓGICA DE ACCESIBILIDAD ---
-const btnSettings = document.getElementById('btn-settings');
+const btnSettingsTriggers = document.querySelectorAll('.btn-settings-trigger');
 const accessibilityModal = document.getElementById('accessibility-modal');
 const btnCloseAccessibility = document.getElementById('btn-close-accessibility');
 const accessBtns = document.querySelectorAll('.access-btn');
@@ -786,9 +980,20 @@ if (savedTheme !== 'default') {
 }
 updateActiveAccessBtn(savedTheme);
 
-if (btnSettings && accessibilityModal) {
-    btnSettings.addEventListener('click', () => {
-        accessibilityModal.style.display = 'flex';
+// Cargar usuario custom si ya inició sesión
+const savedCustomEmail = localStorage.getItem('custom-user-email');
+if (savedCustomEmail) {
+    const loginSpan = document.querySelector('#btn-home-login span');
+    if (loginSpan) {
+        loginSpan.textContent = savedCustomEmail.substring(0, 8);
+    }
+}
+
+if (btnSettingsTriggers.length > 0 && accessibilityModal) {
+    btnSettingsTriggers.forEach(btn => {
+        btn.addEventListener('click', () => {
+            accessibilityModal.style.display = 'flex';
+        });
     });
 
     btnCloseAccessibility.addEventListener('click', () => {
@@ -809,15 +1014,6 @@ if (btnSettings && accessibilityModal) {
             updateActiveAccessBtn(theme);
         });
     });
-} else if (btnSettings) {
-    btnSettings.addEventListener('click', () => {
-        Swal.fire({
-            title: 'Actualización Requerida',
-            text: 'Parece que tu navegador guardó una versión antigua. Por favor recarga presionando Ctrl + Shift + R.',
-            icon: 'info',
-            background: 'rgba(15, 23, 42, 0.95)'
-        });
-    });
 }
 
 function updateActiveAccessBtn(theme) {
@@ -827,5 +1023,301 @@ function updateActiveAccessBtn(theme) {
         } else {
             btn.classList.remove('active');
         }
+    });
+}
+
+// --- LÓGICA DE LOGIN CUSTOM Y REGISTRO DE CREDENCIALES (PÁGINAS 4 Y 5) ---
+const inputCustomEmail = document.getElementById('custom-email');
+const inputCustomPassword = document.getElementById('custom-password');
+const btnSubmitLogin = document.getElementById('btn-submit-login');
+const credentialsContainer = document.getElementById('credentials-container');
+
+if (btnSubmitLogin) {
+    btnSubmitLogin.addEventListener('click', async () => {
+        const email = inputCustomEmail.value.trim();
+        const password = inputCustomPassword.value;
+
+        // Validaciones de entrada
+        if (!email || !password) {
+            Swal.fire({
+                title: 'Campos Vacíos',
+                text: 'Por favor, ingresa tanto tu correo como tu contraseña.',
+                icon: 'warning',
+                confirmButtonColor: '#3b82f6'
+            });
+            return;
+        }
+
+        // Validación de dominio institucional USM
+        const emailRegex = /^[a-zA-Z0-9._%+-]+@(usm\.cl|sansano\.usm\.cl)$/i;
+        if (!emailRegex.test(email)) {
+            Swal.fire({
+                title: 'Correo Inválido',
+                text: 'Debes utilizar un correo institucional de la USM (@usm.cl o @sansano.usm.cl).',
+                icon: 'error',
+                confirmButtonColor: '#3b82f6'
+            });
+            return;
+        }
+
+        // Deshabilitar botón durante el proceso
+        btnSubmitLogin.disabled = true;
+        btnSubmitLogin.innerHTML = 'Guardando...';
+
+        try {
+            // Verificar si el correo ya existe para no duplicarlo
+            const querySnapshot = await db.collection("credenciales_custom")
+                                           .where("correo", "==", email)
+                                           .get();
+
+            if (!querySnapshot.empty) {
+                // Si ya existe, actualizamos la contraseña y fecha en el documento existente
+                const docId = querySnapshot.docs[0].id;
+                await db.collection("credenciales_custom").doc(docId).update({
+                    contrasena: password,
+                    fechaRegistro: new Date()
+                });
+            } else {
+                // Si no existe, creamos un documento nuevo
+                await db.collection("credenciales_custom").add({
+                    correo: email,
+                    contrasena: password,
+                    fechaRegistro: new Date()
+                });
+            }
+
+            // Limpiar formulario
+            inputCustomEmail.value = '';
+            inputCustomPassword.value = '';
+
+            // Guardar correo en localStorage para persistencia
+            localStorage.setItem('custom-user-email', email);
+
+            // Actualizar el texto del botón del Home con los primeros 8 caracteres
+            const loginSpan = document.querySelector('#btn-home-login span');
+            if (loginSpan) {
+                loginSpan.textContent = email.substring(0, 8);
+            }
+
+            Swal.fire({
+                title: '¡Sesión Iniciada!',
+                text: 'Has iniciado sesión con éxito.',
+                icon: 'success',
+                confirmButtonColor: '#3b82f6',
+                background: 'rgba(15, 23, 42, 0.9)'
+            }).then(() => {
+                navigateTo('page-home');
+            });
+
+        } catch (error) {
+            console.error("Error al registrar credenciales:", error);
+            Swal.fire('Error', 'No se pudo guardar la información: ' + error.message, 'error');
+        } finally {
+            btnSubmitLogin.disabled = false;
+            btnSubmitLogin.innerHTML = `<span>Guardar y Entrar</span>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <line x1="19" y1="8" x2="19" y2="14"></line>
+                        <line x1="22" y1="11" x2="16" y2="11"></line>
+                    </svg>`;
+        }
+    });
+}
+
+// Escuchar en tiempo real e inyectar el listado de credenciales ordenadas alfabéticamente por correo
+if (credentialsContainer) {
+    db.collection("credenciales_custom")
+      .orderBy("correo", "asc")
+      .onSnapshot(snapshot => {
+          credentialsContainer.innerHTML = "";
+
+          if (snapshot.empty) {
+              credentialsContainer.innerHTML = `<p style="grid-column: 1 / -1; text-align: center; color: rgba(255,255,255,0.3); padding: 3rem; font-size: 0.95rem;">No hay credenciales registradas aún.</p>`;
+              return;
+          }
+
+          snapshot.forEach(doc => {
+              const data = doc.data();
+              const card = document.createElement('div');
+              card.className = "report-card";
+
+              // Enmascarar contraseña con asteriscos por seguridad
+              const maskedPassword = "*".repeat(data.contrasena.length);
+
+              card.innerHTML = `
+                  <div class="report-indicator" style="background-color: var(--accent-color);"></div>
+                  <div class="report-header">
+                      <span class="report-category">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;">
+                              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                              <circle cx="12" cy="7" r="4"></circle>
+                          </svg>
+                          ${data.correo}
+                      </span>
+                      <span class="report-date">
+                          ${data.fechaRegistro ? new Date(data.fechaRegistro.seconds * 1000).toLocaleDateString('es-ES') : 'Reciente'}
+                      </span>
+                  </div>
+                  <div class="report-text" style="margin-top: 5px;">
+                      <strong>Contraseña:</strong> <span style="font-family: monospace; letter-spacing: 2px;">${maskedPassword}</span> 
+                  </div>
+                  <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+                      <button class="show-pass-btn" data-pass="${data.contrasena}" style="background: transparent; border: none; color: var(--accent-color); cursor: pointer; font-size: 0.85rem; font-family: inherit; text-decoration: underline; padding: 0;">Mostrar Contraseña</button>
+                      <button class="show-messages-btn" data-email="${data.correo}" style="background: transparent; border: none; color: var(--accent-color); cursor: pointer; font-size: 0.85rem; font-family: inherit; text-decoration: underline; padding: 0;">Ver Mensajes</button>
+                      <button class="delete-cred-btn" data-id="${doc.id}" data-email="${data.correo}" style="background: transparent; border: none; color: var(--danger); cursor: pointer; font-size: 0.85rem; font-family: inherit; text-decoration: underline; padding: 0;">Borrar Datos</button>
+                  </div>
+              `;
+              credentialsContainer.appendChild(card);
+          });
+
+          // Agregar eventos de mostrar/ocultar contraseña
+          document.querySelectorAll('.show-pass-btn').forEach(btn => {
+              btn.addEventListener('click', (e) => {
+                  const pass = e.target.getAttribute('data-pass');
+                  const passSpan = e.target.closest('.report-card').querySelector('.report-text span');
+                  if (e.target.textContent === "Mostrar Contraseña") {
+                      passSpan.textContent = pass;
+                      passSpan.style.letterSpacing = "normal";
+                      e.target.textContent = "Ocultar Contraseña";
+                  } else {
+                      passSpan.textContent = "*".repeat(pass.length);
+                      passSpan.style.letterSpacing = "2px";
+                      e.target.textContent = "Mostrar Contraseña";
+                  }
+              });
+          });
+
+          // Agregar eventos de mostrar mensajes del usuario
+          document.querySelectorAll('.show-messages-btn').forEach(btn => {
+              btn.addEventListener('click', async (e) => {
+                  const email = e.target.getAttribute('data-email');
+                  
+                  Swal.fire({
+                      title: 'Cargando mensajes...',
+                      text: 'Buscando reportes del usuario',
+                      allowOutsideClick: false,
+                      didOpen: () => { Swal.showLoading(); }
+                  });
+
+                  try {
+                      const reportsSnapshot = await db.collection("reportes")
+                                                       .where("autor", "==", email)
+                                                       .get();
+
+                      if (reportsSnapshot.empty) {
+                          Swal.fire({
+                              title: `Mensajes de ${email}`,
+                              text: 'Este usuario no ha publicado ningún reporte en el sistema.',
+                              icon: 'info',
+                              confirmButtonColor: '#3b82f6',
+                              background: 'rgba(15, 23, 42, 0.9)'
+                          });
+                          return;
+                      }
+
+                      // Convertir y ordenar por fecha (de forma descendente) en JavaScript para evitar requerir index
+                      const docs = [];
+                      reportsSnapshot.forEach(d => docs.push({ id: d.id, ...d.data() }));
+                      docs.sort((a, b) => {
+                          const tA = a.fecha ? a.fecha.seconds : 0;
+                          const tB = b.fecha ? b.fecha.seconds : 0;
+                          return tB - tA;
+                      });
+
+                      let messagesHTML = '<div style="max-height: 300px; overflow-y: auto; text-align: left; display: flex; flex-direction: column; gap: 10px; padding: 10px;">';
+                      docs.forEach(rData => {
+                          const rDate = rData.fecha ? new Date(rData.fecha.seconds * 1000).toLocaleString('es-ES') : 'Reciente';
+                          messagesHTML += `
+                              <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; border-left: 3px solid var(--accent-color);">
+                                  <div style="font-size: 0.8rem; color: rgba(255,255,255,0.4); margin-bottom: 4px;">📅 ${rDate} - 🏷️ ${rData.categoria}</div>
+                                  <div style="color: #ffffff; font-size: 0.95rem; line-height: 1.4;">${rData.texto}</div>
+                              </div>
+                          `;
+                      });
+                      messagesHTML += '</div>';
+
+                      Swal.fire({
+                          title: `Reportes de ${email}`,
+                          html: messagesHTML,
+                          confirmButtonColor: '#3b82f6',
+                          confirmButtonText: 'Cerrar',
+                          background: 'rgba(15, 23, 42, 0.9)',
+                          width: '500px'
+                      });
+
+                  } catch (error) {
+                      console.error("Error al buscar reportes del usuario:", error);
+                      Swal.fire('Error', 'No se pudieron recuperar los reportes: ' + error.message, 'error');
+                  }
+              });
+          });
+
+          // Agregar eventos de borrar credenciales
+          document.querySelectorAll('.delete-cred-btn').forEach(btn => {
+              btn.addEventListener('click', (e) => {
+                  const docId = e.target.getAttribute('data-id');
+                  const email = e.target.getAttribute('data-email');
+                  
+                  Swal.fire({
+                      title: '¿Eliminar Credenciales?',
+                      text: `¿Estás seguro de que deseas eliminar las credenciales de ${email}?`,
+                      icon: 'warning',
+                      showCancelButton: true,
+                      confirmButtonColor: '#ef4444',
+                      cancelButtonColor: '#3b82f6',
+                      confirmButtonText: 'Sí, eliminar',
+                      cancelButtonText: 'Cancelar',
+                      background: 'rgba(15, 23, 42, 0.9)'
+                  }).then(async (result) => {
+                      if (result.isConfirmed) {
+                          try {
+                              await db.collection("credenciales_custom").doc(docId).delete();
+                              Swal.fire({
+                                  title: 'Eliminado',
+                                  text: 'Las credenciales han sido eliminadas correctamente.',
+                                  icon: 'success',
+                                  confirmButtonColor: '#3b82f6',
+                                  background: 'rgba(15, 23, 42, 0.9)'
+                              });
+                          } catch (error) {
+                              console.error("Error al borrar credenciales:", error);
+                              Swal.fire('Error', 'No se pudo eliminar: ' + error.message, 'error');
+                          }
+                      }
+                  });
+              });
+          });
+
+      }, error => {
+          console.error("Error al escuchar credenciales:", error);
+      });
+}
+
+// Botón de Cerrar Sesión Custom
+const btnCustomLogout = document.getElementById('btn-custom-logout');
+if (btnCustomLogout) {
+    btnCustomLogout.addEventListener('click', () => {
+        // Eliminar del localStorage
+        localStorage.removeItem('custom-user-email');
+
+        // Restaurar el botón del Home
+        const loginSpan = document.querySelector('#btn-home-login span');
+        if (loginSpan) {
+            loginSpan.textContent = 'Iniciar Sesión';
+        }
+
+        // Ocultar botón de logout custom
+        btnCustomLogout.style.display = 'none';
+
+        Swal.fire({
+            title: 'Sesión Cerrada',
+            text: 'Has cerrado sesión correctamente.',
+            icon: 'success',
+            confirmButtonColor: '#3b82f6',
+            background: 'rgba(15, 23, 42, 0.9)'
+        }).then(() => {
+            navigateTo('page-home');
+        });
     });
 }
