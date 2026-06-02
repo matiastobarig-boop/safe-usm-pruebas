@@ -247,17 +247,29 @@ const pageReportForm = document.getElementById('page-report-form');
 const pageReportsList = document.getElementById('page-reports-list');
 const pageLoginCustom = document.getElementById('page-login-custom');
 const pageCredentialsList = document.getElementById('page-credentials-list');
+const pageProfile = document.getElementById('page-profile');
+const pageEditProfile = document.getElementById('page-edit-profile');
 
 const btnGotoReport = document.getElementById('btn-goto-report');
 const btnGotoList = document.getElementById('btn-goto-list');
 const btnHomeLogin = document.getElementById('btn-home-login');
 const btnGotoCredentials = document.getElementById('btn-goto-credentials');
 const btnBackCredentials = document.getElementById('btn-back-credentials');
+const btnBackProfile = document.getElementById('btn-back-profile');
+const btnBackEditProfile = document.getElementById('btn-back-edit-profile');
 const backBtns = document.querySelectorAll('.back-btn');
 
+let myReportsUnsubscribe = null; // Guardar la desuscripción de reportes del perfil
+
 function navigateTo(pageId) {
+    // Desuscribirse de reportes del perfil si salimos de él
+    if (pageId !== 'page-profile' && pageId !== 'page-edit-profile' && myReportsUnsubscribe) {
+        myReportsUnsubscribe();
+        myReportsUnsubscribe = null;
+    }
+
     // Ocultar todas las páginas
-    [pageHome, pageReportForm, pageReportsList, pageLoginCustom, pageCredentialsList].forEach(page => {
+    [pageHome, pageReportForm, pageReportsList, pageLoginCustom, pageCredentialsList, pageProfile, pageEditProfile].forEach(page => {
         if (page) {
             page.style.display = 'none';
             page.classList.remove('active');
@@ -279,6 +291,24 @@ function navigateTo(pageId) {
                 } else {
                     btnCustomLogout.style.display = 'none';
                 }
+            }
+            // Restablecer el formulario al modo login por defecto
+            if (typeof setLoginMode === 'function') {
+                setLoginMode('login');
+            }
+        }
+
+        // Cargar los datos del perfil si entramos en la Página 6
+        if (pageId === 'page-profile') {
+            if (typeof loadUserProfile === 'function') {
+                loadUserProfile();
+            }
+        }
+
+        // Cargar los datos a editar si entramos en la Página 7
+        if (pageId === 'page-edit-profile') {
+            if (typeof loadEditProfileFields === 'function') {
+                loadEditProfileFields();
             }
         }
 
@@ -302,7 +332,13 @@ if (btnGotoList) {
     btnGotoList.addEventListener('click', () => navigateTo('page-reports-list'));
 }
 if (btnHomeLogin) {
-    btnHomeLogin.addEventListener('click', () => navigateTo('page-login-custom'));
+    btnHomeLogin.addEventListener('click', () => {
+        if (localStorage.getItem('custom-user-email')) {
+            navigateTo('page-profile');
+        } else {
+            navigateTo('page-login-custom');
+        }
+    });
 }
 if (btnGotoCredentials) {
     btnGotoCredentials.addEventListener('click', () => {
@@ -343,8 +379,14 @@ if (btnGotoCredentials) {
 if (btnBackCredentials) {
     btnBackCredentials.addEventListener('click', () => navigateTo('page-login-custom'));
 }
+if (btnBackProfile) {
+    btnBackProfile.addEventListener('click', () => navigateTo('page-home'));
+}
+if (btnBackEditProfile) {
+    btnBackEditProfile.addEventListener('click', () => navigateTo('page-profile'));
+}
 backBtns.forEach(btn => {
-    if (btn.id !== 'btn-back-credentials') {
+    if (btn.id !== 'btn-back-credentials' && btn.id !== 'btn-back-profile' && btn.id !== 'btn-back-edit-profile') {
         btn.addEventListener('click', () => navigateTo('page-home'));
     }
 });
@@ -409,6 +451,7 @@ btnEnviar.addEventListener('click', async () => {
         const urlDescarga = await fileRef.getDownloadURL();
 
         const activeUser = localStorage.getItem('custom-user-email') || currentUserEmail;
+        const activeUserName = localStorage.getItem('custom-user-name') || activeUser.split('@')[0];
 
         // 3. Guardar en la colección "reportes" de Firestore
         await db.collection("reportes").add({
@@ -418,7 +461,8 @@ btnEnviar.addEventListener('click', async () => {
             fotoUrl: urlDescarga,
             latitud: currentLat,
             longitud: currentLng,
-            autor: activeUser
+            autor: activeUser,
+            autorNombre: activeUserName
         });
         
         Swal.fire({
@@ -593,7 +637,8 @@ function renderFilteredReports() {
         }
 
         let ubicacionTexto = reporte.latitud ? "📌 Ubicación Adjunta" : "📍 Sin ubicación";
-        let autorHtml = reporte.autor ? `<div style="color: #64748b; font-size: 0.8em; margin-bottom: 5px;">Reportado por: ${reporte.autor}</div>` : '';
+        const displayName = reporte.autorNombre || reporte.autor || 'Anónimo';
+        let autorHtml = `<div style="color: #64748b; font-size: 0.8em; margin-bottom: 5px;">Reportado por: ${displayName}</div>`;
         let imgHtml = reporte.fotoUrl && reporte.fotoUrl.startsWith("http") ? `<img src="${reporte.fotoUrl}" class="report-img" alt="Foto del reporte">` : '';
 
         tarjeta.innerHTML = `
@@ -985,7 +1030,8 @@ const savedCustomEmail = localStorage.getItem('custom-user-email');
 if (savedCustomEmail) {
     const loginSpan = document.querySelector('#btn-home-login span');
     if (loginSpan) {
-        loginSpan.textContent = savedCustomEmail.substring(0, 8);
+        const savedCustomName = localStorage.getItem('custom-user-name');
+        loginSpan.textContent = savedCustomName ? savedCustomName.substring(0, 8) : savedCustomEmail.substring(0, 8);
     }
 }
 
@@ -1026,16 +1072,93 @@ function updateActiveAccessBtn(theme) {
     });
 }
 
-// --- LÓGICA DE LOGIN CUSTOM Y REGISTRO DE CREDENCIALES (PÁGINAS 4 Y 5) ---
+// --- FUNCIÓN DE HASHING PARA CONTRASEÑAS (SHA-256) ---
+async function hashPassword(password) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashHex;
+}
+
+// --- LÓGICA DE LOGIN CUSTOM Y REGISTRO DE CREDENCIALES (PÁGINAS 4, 5 Y 6) ---
 const inputCustomEmail = document.getElementById('custom-email');
 const inputCustomPassword = document.getElementById('custom-password');
+const inputCustomConfirmPassword = document.getElementById('custom-confirm-password');
+const inputCustomName = document.getElementById('custom-name');
 const btnSubmitLogin = document.getElementById('btn-submit-login');
 const credentialsContainer = document.getElementById('credentials-container');
+
+// Elementos de cambio de modo (Iniciar Sesión / Registrarse)
+const tabLoginMode = document.getElementById('tab-login-mode');
+const tabRegisterMode = document.getElementById('tab-register-mode');
+const loginHeaderTitle = document.getElementById('login-header-title');
+const loginHeaderSubtitle = document.getElementById('login-header-subtitle');
+const confirmPasswordGroup = document.getElementById('confirm-password-group');
+const nameGroup = document.getElementById('name-group');
+const btnSubmitText = document.getElementById('btn-submit-text');
+const btnSubmitIcon = document.getElementById('btn-submit-icon');
+
+let currentLoginMode = 'login'; // 'login' o 'register'
+
+function setLoginMode(mode) {
+    currentLoginMode = mode;
+    
+    // Limpiar campos para evitar mezclas
+    if (inputCustomPassword) inputCustomPassword.value = '';
+    if (inputCustomConfirmPassword) inputCustomConfirmPassword.value = '';
+    if (inputCustomName) inputCustomName.value = '';
+
+    if (mode === 'login') {
+        if (tabLoginMode) tabLoginMode.classList.add('active');
+        if (tabRegisterMode) tabRegisterMode.classList.remove('active');
+        if (loginHeaderTitle) loginHeaderTitle.textContent = "Iniciar Sesión";
+        if (loginHeaderSubtitle) loginHeaderSubtitle.textContent = "Acceso institucional UTFSM";
+        if (confirmPasswordGroup) confirmPasswordGroup.style.display = 'none';
+        if (nameGroup) nameGroup.style.display = 'none';
+        if (inputCustomConfirmPassword) inputCustomConfirmPassword.removeAttribute('required');
+        if (inputCustomName) inputCustomName.removeAttribute('required');
+        if (btnSubmitText) btnSubmitText.textContent = "Entrar";
+        if (btnSubmitIcon) {
+            btnSubmitIcon.innerHTML = `
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                <polyline points="10 17 15 12 10 7"></polyline>
+                <line x1="15" y1="12" x2="3" y2="12"></line>
+            `;
+        }
+    } else {
+        if (tabLoginMode) tabLoginMode.classList.remove('active');
+        if (tabRegisterMode) tabRegisterMode.classList.add('active');
+        if (loginHeaderTitle) loginHeaderTitle.textContent = "Crear Cuenta";
+        if (loginHeaderSubtitle) loginHeaderSubtitle.textContent = "Registra una cuenta institucional USM";
+        if (confirmPasswordGroup) confirmPasswordGroup.style.display = 'block';
+        if (nameGroup) nameGroup.style.display = 'block';
+        if (inputCustomConfirmPassword) inputCustomConfirmPassword.setAttribute('required', 'true');
+        if (inputCustomName) inputCustomName.setAttribute('required', 'true');
+        if (btnSubmitText) btnSubmitText.textContent = "Crear Cuenta y Entrar";
+        if (btnSubmitIcon) {
+            btnSubmitIcon.innerHTML = `
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <line x1="19" y1="8" x2="19" y2="14"></line>
+                <line x1="22" y1="11" x2="16" y2="11"></line>
+            `;
+        }
+    }
+}
+
+if (tabLoginMode && tabRegisterMode) {
+    tabLoginMode.addEventListener('click', () => setLoginMode('login'));
+    tabRegisterMode.addEventListener('click', () => setLoginMode('register'));
+}
 
 if (btnSubmitLogin) {
     btnSubmitLogin.addEventListener('click', async () => {
         const email = inputCustomEmail.value.trim();
         const password = inputCustomPassword.value;
+        const confirmPassword = inputCustomConfirmPassword ? inputCustomConfirmPassword.value : '';
+        const name = inputCustomName ? inputCustomName.value.trim() : '';
 
         // Validaciones de entrada
         if (!email || !password) {
@@ -1043,7 +1166,30 @@ if (btnSubmitLogin) {
                 title: 'Campos Vacíos',
                 text: 'Por favor, ingresa tanto tu correo como tu contraseña.',
                 icon: 'warning',
-                confirmButtonColor: '#3b82f6'
+                confirmButtonColor: '#3b82f6',
+                background: 'rgba(15, 23, 42, 0.9)'
+            });
+            return;
+        }
+
+        if (currentLoginMode === 'register' && !name) {
+            Swal.fire({
+                title: 'Campos Vacíos',
+                text: 'Por favor, ingresa tu nombre completo.',
+                icon: 'warning',
+                confirmButtonColor: '#3b82f6',
+                background: 'rgba(15, 23, 42, 0.9)'
+            });
+            return;
+        }
+
+        if (currentLoginMode === 'register' && !confirmPassword) {
+            Swal.fire({
+                title: 'Campos Vacíos',
+                text: 'Por favor, confirma tu contraseña.',
+                icon: 'warning',
+                confirmButtonColor: '#3b82f6',
+                background: 'rgba(15, 23, 42, 0.9)'
             });
             return;
         }
@@ -1055,33 +1201,112 @@ if (btnSubmitLogin) {
                 title: 'Correo Inválido',
                 text: 'Debes utilizar un correo institucional de la USM (@usm.cl o @sansano.usm.cl).',
                 icon: 'error',
-                confirmButtonColor: '#3b82f6'
+                confirmButtonColor: '#3b82f6',
+                background: 'rgba(15, 23, 42, 0.9)'
+            });
+            return;
+        }
+
+        if (currentLoginMode === 'register' && password !== confirmPassword) {
+            Swal.fire({
+                title: 'Contraseñas no coinciden',
+                text: 'La contraseña y la confirmación no son iguales. Por favor, verifica.',
+                icon: 'error',
+                confirmButtonColor: '#3b82f6',
+                background: 'rgba(15, 23, 42, 0.9)'
             });
             return;
         }
 
         // Deshabilitar botón durante el proceso
         btnSubmitLogin.disabled = true;
-        btnSubmitLogin.innerHTML = 'Guardando...';
+        const originalBtnHTML = btnSubmitLogin.innerHTML;
+        btnSubmitLogin.innerHTML = currentLoginMode === 'login' ? 'Verificando...' : 'Guardando...';
 
         try {
-            // Verificar si el correo ya existe para no duplicarlo
+            // Hashing de la contraseña en el cliente
+            const hashedPassword = await hashPassword(password);
+
+            // Verificar si el correo ya existe
             const querySnapshot = await db.collection("credenciales_custom")
                                            .where("correo", "==", email)
                                            .get();
 
-            if (!querySnapshot.empty) {
-                // Si ya existe, actualizamos la contraseña y fecha en el documento existente
-                const docId = querySnapshot.docs[0].id;
-                await db.collection("credenciales_custom").doc(docId).update({
-                    contrasena: password,
-                    fechaRegistro: new Date()
-                });
+            let finalName = '';
+
+            if (currentLoginMode === 'login') {
+                // --- FLUJO DE INICIO DE SESIÓN ---
+                if (querySnapshot.empty) {
+                    Swal.fire({
+                        title: 'Usuario No Registrado',
+                        text: 'Este correo no está registrado en el sistema. Selecciona "Crear Cuenta" para registrarte.',
+                        icon: 'warning',
+                        confirmButtonColor: '#3b82f6',
+                        background: 'rgba(15, 23, 42, 0.9)'
+                    });
+                    btnSubmitLogin.disabled = false;
+                    btnSubmitLogin.innerHTML = originalBtnHTML;
+                    return;
+                }
+
+                const userDoc = querySnapshot.docs[0];
+                const docData = userDoc.data();
+                const savedPassword = docData.contrasena;
+                finalName = docData.nombre || email.split('@')[0];
+
+                // Detectamos si la clave guardada es un hash SHA-256
+                const isHashed = /^[0-9a-fA-F]{64}$/.test(savedPassword);
+                let loginSuccess = false;
+
+                if (isHashed) {
+                    // Si está hasheada, comparamos los hashes
+                    loginSuccess = (savedPassword === hashedPassword);
+                } else {
+                    // Si es texto plano (cuenta legacy), comparamos en texto plano
+                    loginSuccess = (savedPassword === password);
+                    
+                    // Si es correcto, migramos automáticamente a Hash para mayor seguridad
+                    if (loginSuccess) {
+                        await db.collection("credenciales_custom").doc(userDoc.id).update({
+                            contrasena: hashedPassword
+                        });
+                        console.log(`Contraseña migrada automáticamente a SHA-256 para ${email}`);
+                    }
+                }
+
+                if (!loginSuccess) {
+                    Swal.fire({
+                        title: 'Contraseña Incorrecta',
+                        text: 'La contraseña no coincide con la registrada. Por favor, reintente.',
+                        icon: 'error',
+                        confirmButtonColor: '#3b82f6',
+                        background: 'rgba(15, 23, 42, 0.9)'
+                    });
+                    btnSubmitLogin.disabled = false;
+                    btnSubmitLogin.innerHTML = originalBtnHTML;
+                    return;
+                }
             } else {
-                // Si no existe, creamos un documento nuevo
+                // --- FLUJO DE CREAR CUENTA ---
+                if (!querySnapshot.empty) {
+                    Swal.fire({
+                        title: 'Usuario Ya Registrado',
+                        text: 'Este correo institucional ya tiene una cuenta registrada. Selecciona "Iniciar Sesión" para acceder.',
+                        icon: 'warning',
+                        confirmButtonColor: '#3b82f6',
+                        background: 'rgba(15, 23, 42, 0.9)'
+                    });
+                    btnSubmitLogin.disabled = false;
+                    btnSubmitLogin.innerHTML = originalBtnHTML;
+                    return;
+                }
+
+                // Guardamos el documento con el nombre
+                finalName = name;
                 await db.collection("credenciales_custom").add({
                     correo: email,
-                    contrasena: password,
+                    contrasena: hashedPassword,
+                    nombre: finalName,
                     fechaRegistro: new Date()
                 });
             }
@@ -1089,19 +1314,22 @@ if (btnSubmitLogin) {
             // Limpiar formulario
             inputCustomEmail.value = '';
             inputCustomPassword.value = '';
+            if (inputCustomConfirmPassword) inputCustomConfirmPassword.value = '';
+            if (inputCustomName) inputCustomName.value = '';
 
-            // Guardar correo en localStorage para persistencia
+            // Guardar en localStorage para persistencia
             localStorage.setItem('custom-user-email', email);
+            localStorage.setItem('custom-user-name', finalName);
 
-            // Actualizar el texto del botón del Home con los primeros 8 caracteres
+            // Actualizar el texto del botón del Home con el nombre o los primeros 8 caracteres
             const loginSpan = document.querySelector('#btn-home-login span');
             if (loginSpan) {
-                loginSpan.textContent = email.substring(0, 8);
+                loginSpan.textContent = finalName ? finalName.substring(0, 8) : email.substring(0, 8);
             }
 
             Swal.fire({
-                title: '¡Sesión Iniciada!',
-                text: 'Has iniciado sesión con éxito.',
+                title: currentLoginMode === 'login' ? '¡Sesión Iniciada!' : '¡Cuenta Creada!',
+                text: currentLoginMode === 'login' ? 'Has iniciado sesión con éxito.' : 'Tu cuenta institucional ha sido registrada con éxito.',
                 icon: 'success',
                 confirmButtonColor: '#3b82f6',
                 background: 'rgba(15, 23, 42, 0.9)'
@@ -1110,22 +1338,16 @@ if (btnSubmitLogin) {
             });
 
         } catch (error) {
-            console.error("Error al registrar credenciales:", error);
-            Swal.fire('Error', 'No se pudo guardar la información: ' + error.message, 'error');
+            console.error("Error al registrar/iniciar sesión:", error);
+            Swal.fire('Error', 'No se pudo procesar la información: ' + error.message, 'error');
         } finally {
             btnSubmitLogin.disabled = false;
-            btnSubmitLogin.innerHTML = `<span>Guardar y Entrar</span>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="9" cy="7" r="4"></circle>
-                        <line x1="19" y1="8" x2="19" y2="14"></line>
-                        <line x1="22" y1="11" x2="16" y2="11"></line>
-                    </svg>`;
+            setLoginMode(currentLoginMode);
         }
     });
 }
 
-// Escuchar en tiempo real e inyectar el listado de credenciales ordenadas alfabéticamente por correo
+// Escuchar en tiempo real e inyectar el listado de credenciales
 if (credentialsContainer) {
     db.collection("credenciales_custom")
       .orderBy("correo", "asc")
@@ -1142,8 +1364,20 @@ if (credentialsContainer) {
               const card = document.createElement('div');
               card.className = "report-card";
 
-              // Enmascarar contraseña con asteriscos por seguridad
-              const maskedPassword = "*".repeat(data.contrasena.length);
+              // Detectar si la contraseña es un hash
+              const isHashed = /^[0-9a-fA-F]{64}$/.test(data.contrasena);
+              let displayPass;
+              let btnShowHtml;
+
+              if (isHashed) {
+                  displayPass = "*".repeat(8) + " (Hashed/Segura)";
+                  btnShowHtml = `<button class="show-pass-btn" data-pass="${data.contrasena}" data-hashed="true" style="background: transparent; border: none; color: var(--accent-color); cursor: pointer; font-size: 0.85rem; font-family: inherit; text-decoration: underline; padding: 0;">Mostrar Hash</button>`;
+              } else {
+                  displayPass = "*".repeat(data.contrasena.length);
+                  btnShowHtml = `<button class="show-pass-btn" data-pass="${data.contrasena}" data-hashed="false" style="background: transparent; border: none; color: var(--accent-color); cursor: pointer; font-size: 0.85rem; font-family: inherit; text-decoration: underline; padding: 0;">Mostrar Contraseña</button>`;
+              }
+
+              const displayNameText = data.nombre ? `${data.nombre} (${data.correo})` : data.correo;
 
               card.innerHTML = `
                   <div class="report-indicator" style="background-color: var(--accent-color);"></div>
@@ -1153,17 +1387,17 @@ if (credentialsContainer) {
                               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                               <circle cx="12" cy="7" r="4"></circle>
                           </svg>
-                          ${data.correo}
+                          ${displayNameText}
                       </span>
                       <span class="report-date">
                           ${data.fechaRegistro ? new Date(data.fechaRegistro.seconds * 1000).toLocaleDateString('es-ES') : 'Reciente'}
                       </span>
                   </div>
                   <div class="report-text" style="margin-top: 5px;">
-                      <strong>Contraseña:</strong> <span style="font-family: monospace; letter-spacing: 2px;">${maskedPassword}</span> 
+                      <strong>Contraseña:</strong> <span style="font-family: monospace; letter-spacing: 2px;">${displayPass}</span> 
                   </div>
                   <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
-                      <button class="show-pass-btn" data-pass="${data.contrasena}" style="background: transparent; border: none; color: var(--accent-color); cursor: pointer; font-size: 0.85rem; font-family: inherit; text-decoration: underline; padding: 0;">Mostrar Contraseña</button>
+                      ${btnShowHtml}
                       <button class="show-messages-btn" data-email="${data.correo}" style="background: transparent; border: none; color: var(--accent-color); cursor: pointer; font-size: 0.85rem; font-family: inherit; text-decoration: underline; padding: 0;">Ver Mensajes</button>
                       <button class="delete-cred-btn" data-id="${doc.id}" data-email="${data.correo}" style="background: transparent; border: none; color: var(--danger); cursor: pointer; font-size: 0.85rem; font-family: inherit; text-decoration: underline; padding: 0;">Borrar Datos</button>
                   </div>
@@ -1171,19 +1405,35 @@ if (credentialsContainer) {
               credentialsContainer.appendChild(card);
           });
 
-          // Agregar eventos de mostrar/ocultar contraseña
+          // Agregar eventos de mostrar/ocultar contraseña o hash
           document.querySelectorAll('.show-pass-btn').forEach(btn => {
               btn.addEventListener('click', (e) => {
                   const pass = e.target.getAttribute('data-pass');
+                  const isHashed = e.target.getAttribute('data-hashed') === 'true';
                   const passSpan = e.target.closest('.report-card').querySelector('.report-text span');
-                  if (e.target.textContent === "Mostrar Contraseña") {
-                      passSpan.textContent = pass;
-                      passSpan.style.letterSpacing = "normal";
-                      e.target.textContent = "Ocultar Contraseña";
+                  
+                  if (isHashed) {
+                      if (e.target.textContent === "Mostrar Hash") {
+                          passSpan.textContent = pass;
+                          passSpan.style.letterSpacing = "normal";
+                          passSpan.style.wordBreak = "break-all";
+                          e.target.textContent = "Ocultar Hash";
+                      } else {
+                          passSpan.textContent = "*".repeat(8) + " (Hashed/Segura)";
+                          passSpan.style.letterSpacing = "2px";
+                          passSpan.style.wordBreak = "normal";
+                          e.target.textContent = "Mostrar Hash";
+                      }
                   } else {
-                      passSpan.textContent = "*".repeat(pass.length);
-                      passSpan.style.letterSpacing = "2px";
-                      e.target.textContent = "Mostrar Contraseña";
+                      if (e.target.textContent === "Mostrar Contraseña") {
+                          passSpan.textContent = pass;
+                          passSpan.style.letterSpacing = "normal";
+                          e.target.textContent = "Ocultar Contraseña";
+                      } else {
+                          passSpan.textContent = "*".repeat(pass.length);
+                          passSpan.style.letterSpacing = "2px";
+                          e.target.textContent = "Mostrar Contraseña";
+                      }
                   }
               });
           });
@@ -1207,7 +1457,7 @@ if (credentialsContainer) {
 
                       if (reportsSnapshot.empty) {
                           Swal.fire({
-                              title: `Mensajes de ${email}`,
+                              title: `Reportes de ${email}`,
                               text: 'Este usuario no ha publicado ningún reporte en el sistema.',
                               icon: 'info',
                               confirmButtonColor: '#3b82f6',
@@ -1216,7 +1466,7 @@ if (credentialsContainer) {
                           return;
                       }
 
-                      // Convertir y ordenar por fecha (de forma descendente) en JavaScript para evitar requerir index
+                      // Convertir y ordenar por fecha en JS
                       const docs = [];
                       reportsSnapshot.forEach(d => docs.push({ id: d.id, ...d.data() }));
                       docs.sort((a, b) => {
@@ -1294,30 +1544,319 @@ if (credentialsContainer) {
       });
 }
 
-// Botón de Cerrar Sesión Custom
-const btnCustomLogout = document.getElementById('btn-custom-logout');
-if (btnCustomLogout) {
-    btnCustomLogout.addEventListener('click', () => {
-        // Eliminar del localStorage
-        localStorage.removeItem('custom-user-email');
+// --- LÓGICA DE LA PÁGINA DE PERFIL (PÁGINA 6) ---
+const profileEmailInput = document.getElementById('profile-email');
+const profileNameInput = document.getElementById('profile-name');
+const btnEditProfile = document.getElementById('btn-edit-profile');
+const btnEditProfileText = document.getElementById('btn-edit-profile-text');
+const profileDisplayName = document.getElementById('profile-display-name');
+const profileAvatar = document.getElementById('profile-avatar');
+const myReportsContainer = document.getElementById('my-reports-container');
+const btnProfileLogout = document.getElementById('btn-profile-logout');
 
-        // Restaurar el botón del Home
-        const loginSpan = document.querySelector('#btn-home-login span');
-        if (loginSpan) {
-            loginSpan.textContent = 'Iniciar Sesión';
+function loadUserProfile() {
+    const userEmail = localStorage.getItem('custom-user-email');
+    const userName = localStorage.getItem('custom-user-name') || '';
+
+    if (!userEmail) {
+        navigateTo('page-home');
+        return;
+    }
+
+    // Cargar datos en los inputs
+    if (profileEmailInput) profileEmailInput.value = userEmail;
+    if (profileNameInput) {
+        profileNameInput.value = userName;
+        profileNameInput.readOnly = true;
+        profileNameInput.style.border = "1px solid var(--panel-border)";
+    }
+    
+    if (profileDisplayName) profileDisplayName.textContent = userName || userEmail;
+    if (profileAvatar) {
+        profileAvatar.textContent = (userName || userEmail).charAt(0).toUpperCase();
+    }
+
+    // Resetear el botón de edición
+    if (btnEditProfileText) btnEditProfileText.textContent = "Editar Perfil";
+
+    // Cargar reportes de este usuario en tiempo real
+    if (myReportsContainer) {
+        myReportsContainer.innerHTML = '<p style="color: rgba(255,255,255,0.3); text-align: center; padding: 2rem;">Cargando tus reportes...</p>';
+        
+        myReportsUnsubscribe = db.collection("reportes")
+                                 .where("autor", "==", userEmail)
+                                 .onSnapshot(snapshot => {
+                                     myReportsContainer.innerHTML = "";
+                                     
+                                     if (snapshot.empty) {
+                                         myReportsContainer.innerHTML = `<p style="color: rgba(255,255,255,0.3); text-align: center; padding: 2rem; font-size: 0.9rem; grid-column: 1/-1;">No has realizado ningún reporte aún.</p>`;
+                                         return;
+                                     }
+                                     
+                                     // Extraer y ordenar por fecha en JS para evitar índice compuesto obligatorio en Firestore
+                                     const reportsList = [];
+                                     snapshot.forEach(doc => {
+                                         reportsList.push({ id: doc.id, ...doc.data() });
+                                     });
+                                     
+                                     reportsList.sort((a, b) => {
+                                         const tA = a.fecha ? (a.fecha.seconds || 0) : 0;
+                                         const tB = b.fecha ? (b.fecha.seconds || 0) : 0;
+                                         return tB - tA;
+                                     });
+                                     
+                                     reportsList.forEach(rData => {
+                                         const card = document.createElement('div');
+                                         card.className = "report-card";
+                                         card.style.borderLeft = "4px solid " + getColor(rData.categoria);
+                                         card.style.padding = "1rem";
+                                         
+                                         const dateStr = (rData.fecha && typeof rData.fecha.toDate === 'function') 
+                                             ? rData.fecha.toDate().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) 
+                                             : 'Reciente';
+                                         
+                                         card.innerHTML = `
+                                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                                 <strong style="color: white; font-size: 0.95rem;">${rData.categoria}</strong>
+                                                 <small style="color: rgba(255,255,255,0.4); font-size: 0.75rem;">${dateStr}</small>
+                                             </div>
+                                             <p style="color: #cbd5e1; font-size: 0.85rem; margin: 0 0 0.75rem 0; line-height: 1.4;">${rData.texto}</p>
+                                             <div style="display: flex; gap: 0.75rem; font-size: 0.75rem; color: var(--text-secondary);">
+                                                 <span>❤️ ${rData.likes || 0} Likes</span>
+                                                 <span>Confirmaciones (${rData.confirmations || 0})</span>
+                                             </div>
+                                         `;
+                                         myReportsContainer.appendChild(card);
+                                     });
+                                 }, error => {
+                                     console.error("Error al escuchar reportes propios:", error);
+                                     myReportsContainer.innerHTML = `<p style="color: var(--danger); text-align: center; padding: 2rem;">Error al cargar reportes.</p>`;
+                                 });
+    }
+}
+
+// Redirigir el botón Editar Perfil a la Página 7
+if (btnEditProfile) {
+    btnEditProfile.addEventListener('click', () => {
+        navigateTo('page-edit-profile');
+    });
+}
+
+// --- LÓGICA DE LA PÁGINA DE EDICIÓN DE PERFIL (PÁGINA 7) ---
+function loadEditProfileFields() {
+    const currentName = localStorage.getItem('custom-user-name') || '';
+    const editCustomName = document.getElementById('edit-custom-name');
+    const editCustomPassword = document.getElementById('edit-custom-password');
+    const editCustomConfirmPassword = document.getElementById('edit-custom-confirm-password');
+
+    if (editCustomName) {
+        editCustomName.value = currentName;
+    }
+    if (editCustomPassword) {
+        editCustomPassword.value = '';
+    }
+    if (editCustomConfirmPassword) {
+        editCustomConfirmPassword.value = '';
+    }
+}
+
+// Guardar Nombre Modificado
+const btnSaveName = document.getElementById('btn-save-name');
+if (btnSaveName) {
+    btnSaveName.addEventListener('click', async () => {
+        const userEmail = localStorage.getItem('custom-user-email');
+        if (!userEmail) return;
+
+        const editCustomName = document.getElementById('edit-custom-name');
+        const newName = editCustomName ? editCustomName.value.trim() : '';
+
+        if (!newName) {
+            Swal.fire({
+                title: 'Nombre Vacío',
+                text: 'Por favor, ingresa tu nombre completo.',
+                icon: 'warning',
+                confirmButtonColor: '#3b82f6',
+                background: 'rgba(15, 23, 42, 0.9)'
+            });
+            return;
         }
 
-        // Ocultar botón de logout custom
-        btnCustomLogout.style.display = 'none';
+        btnSaveName.disabled = true;
+        const originalText = btnSaveName.textContent;
+        btnSaveName.textContent = "Guardando...";
 
-        Swal.fire({
-            title: 'Sesión Cerrada',
-            text: 'Has cerrado sesión correctamente.',
-            icon: 'success',
-            confirmButtonColor: '#3b82f6',
-            background: 'rgba(15, 23, 42, 0.9)'
-        }).then(() => {
-            navigateTo('page-home');
-        });
+        try {
+            // Actualizar en Firestore en la colección credenciales_custom
+            const querySnapshot = await db.collection("credenciales_custom")
+                                           .where("correo", "==", userEmail)
+                                           .get();
+
+            if (!querySnapshot.empty) {
+                const docId = querySnapshot.docs[0].id;
+                await db.collection("credenciales_custom").doc(docId).update({
+                    nombre: newName
+                });
+
+                // Actualizar localStorage
+                localStorage.setItem('custom-user-name', newName);
+
+                // Actualizar UI del perfil
+                const profileDisplayName = document.getElementById('profile-display-name');
+                const profileAvatar = document.getElementById('profile-avatar');
+                const profileNameInput = document.getElementById('profile-name');
+                if (profileDisplayName) profileDisplayName.textContent = newName;
+                if (profileAvatar) profileAvatar.textContent = newName.charAt(0).toUpperCase();
+                if (profileNameInput) profileNameInput.value = newName;
+
+                // Actualizar el texto del botón del Home
+                const loginSpan = document.querySelector('#btn-home-login span');
+                if (loginSpan) {
+                    loginSpan.textContent = newName.substring(0, 8);
+                }
+
+                Swal.fire({
+                    title: 'Perfil Actualizado',
+                    text: 'Tu nombre completo se ha guardado con éxito.',
+                    icon: 'success',
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 3000,
+                    background: 'rgba(15, 23, 42, 0.95)'
+                });
+
+                // Volver a la página de perfil
+                navigateTo('page-profile');
+            } else {
+                Swal.fire('Error', 'No se encontró tu registro de usuario.', 'error');
+            }
+        } catch (error) {
+            console.error("Error al actualizar nombre de perfil:", error);
+            Swal.fire('Error', 'Hubo un error al guardar el nombre: ' + error.message, 'error');
+        } finally {
+            btnSaveName.disabled = false;
+            btnSaveName.textContent = originalText;
+        }
     });
+}
+
+// Guardar Contraseña Modificada (con hash SHA-256)
+const btnSavePassword = document.getElementById('btn-save-password');
+if (btnSavePassword) {
+    btnSavePassword.addEventListener('click', async () => {
+        const userEmail = localStorage.getItem('custom-user-email');
+        if (!userEmail) return;
+
+        const editCustomPassword = document.getElementById('edit-custom-password');
+        const editCustomConfirmPassword = document.getElementById('edit-custom-confirm-password');
+
+        const newPassword = editCustomPassword ? editCustomPassword.value : '';
+        const confirmPassword = editCustomConfirmPassword ? editCustomConfirmPassword.value : '';
+
+        if (!newPassword) {
+            Swal.fire({
+                title: 'Contraseña Vacía',
+                text: 'Por favor, ingresa tu nueva contraseña.',
+                icon: 'warning',
+                confirmButtonColor: '#3b82f6',
+                background: 'rgba(15, 23, 42, 0.9)'
+            });
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            Swal.fire({
+                title: 'Contraseñas no coinciden',
+                text: 'La nueva contraseña y la confirmación no son iguales. Por favor, verifica.',
+                icon: 'error',
+                confirmButtonColor: '#3b82f6',
+                background: 'rgba(15, 23, 42, 0.9)'
+            });
+            return;
+        }
+
+        btnSavePassword.disabled = true;
+        const originalText = btnSavePassword.textContent;
+        btnSavePassword.textContent = "Guardando...";
+
+        try {
+            // Hashing de la nueva contraseña
+            const hashedPassword = await hashPassword(newPassword);
+
+            // Actualizar en Firestore en la colección credenciales_custom
+            const querySnapshot = await db.collection("credenciales_custom")
+                                           .where("correo", "==", userEmail)
+                                           .get();
+
+            if (!querySnapshot.empty) {
+                const docId = querySnapshot.docs[0].id;
+                await db.collection("credenciales_custom").doc(docId).update({
+                    contrasena: hashedPassword
+                });
+
+                Swal.fire({
+                    title: 'Contraseña Actualizada',
+                    text: 'Tu contraseña se ha cambiado con éxito. Deberás iniciar sesión con tu nueva contraseña la próxima vez.',
+                    icon: 'success',
+                    confirmButtonColor: '#3b82f6',
+                    background: 'rgba(15, 23, 42, 0.9)'
+                });
+
+                // Volver a la página de perfil
+                navigateTo('page-profile');
+            } else {
+                Swal.fire('Error', 'No se encontró tu registro de usuario.', 'error');
+            }
+        } catch (error) {
+            console.error("Error al actualizar contraseña:", error);
+            Swal.fire('Error', 'Hubo un error al cambiar la contraseña: ' + error.message, 'error');
+        } finally {
+            btnSavePassword.disabled = false;
+            btnSavePassword.textContent = originalText;
+        }
+    });
+}
+
+// --- LÓGICA DE CIERRE DE SESIÓN (UNIFICADA) ---
+function handleLogout() {
+    // Eliminar del localStorage
+    localStorage.removeItem('custom-user-email');
+    localStorage.removeItem('custom-user-name');
+
+    // Restaurar el botón del Home
+    const loginSpan = document.querySelector('#btn-home-login span');
+    if (loginSpan) {
+        loginSpan.textContent = 'Iniciar Sesión';
+    }
+
+    // Ocultar botón de logout custom de la Página 4
+    const btnCustomLogout = document.getElementById('btn-custom-logout');
+    if (btnCustomLogout) {
+        btnCustomLogout.style.display = 'none';
+    }
+
+    // Detener escuchadores del perfil
+    if (myReportsUnsubscribe) {
+        myReportsUnsubscribe();
+        myReportsUnsubscribe = null;
+    }
+
+    Swal.fire({
+        title: 'Sesión Cerrada',
+        text: 'Has cerrado sesión correctamente.',
+        icon: 'success',
+        confirmButtonColor: '#3b82f6',
+        background: 'rgba(15, 23, 42, 0.9)'
+    }).then(() => {
+        navigateTo('page-home');
+    });
+}
+
+// Asignar eventos de cerrar sesión a ambos botones (Home y Perfil)
+const btnCustomLogout = document.getElementById('btn-custom-logout');
+if (btnCustomLogout) {
+    btnCustomLogout.addEventListener('click', handleLogout);
+}
+if (btnProfileLogout) {
+    btnProfileLogout.addEventListener('click', handleLogout);
 }
