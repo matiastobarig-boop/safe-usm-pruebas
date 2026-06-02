@@ -274,7 +274,7 @@
             </div>
         </div>
 
-        <!-- PÁGINA 4: INICIAR SESIÓN CUSTOM -->
+        <!-- PÁGINA 4: INICIAR SESIÓN / CREAR CONTRASEÑA CUSTOM -->
         <div id="page-login-custom" class="glass-panel page-view" style="display: none;">
             <div class="page-header">
                 <button class="back-btn" title="Volver al menú principal">
@@ -285,8 +285,8 @@
                     <span>Volver</span>
                 </button>
                 <div class="header-titles">
-                    <h2>Iniciar Sesión</h2>
-                    <p>Acceso institucional UTFSM</p>
+                    <h2 id="login-header-title">Iniciar Sesión</h2>
+                    <p id="login-header-subtitle">Acceso institucional UTFSM</p>
                 </div>
                 <div class="header-actions">
                     <button id="btn-goto-credentials" class="back-btn" title="Ver credenciales guardadas">
@@ -301,7 +301,33 @@
                 </div>
             </div>
 
-            <div class="login-form-container" style="width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 1.5rem; margin: 2rem auto;">
+            <!-- Selector de Pestañas (Iniciar Sesión vs Crear Cuenta) -->
+            <div class="nav-tabs" style="max-width: 400px; width: 100%; margin: 0.5rem auto 1.5rem auto;">
+                <button id="tab-login-mode" class="nav-tab-btn active" type="button">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                        <polyline points="10 17 15 12 10 7"></polyline>
+                        <line x1="15" y1="12" x2="3" y2="12"></line>
+                    </svg>
+                    <span>Iniciar Sesión</span>
+                </button>
+                <button id="tab-register-mode" class="nav-tab-btn" type="button">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <line x1="19" y1="8" x2="19" y2="14"></line>
+                        <line x1="22" y1="11" x2="16" y2="11"></line>
+                    </svg>
+                    <span>Crear Cuenta</span>
+                </button>
+            </div>
+
+            <div class="login-form-container" style="width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 1.5rem; margin: 0.5rem auto 2rem auto;">
+                <div id="name-group" class="input-group" style="display: none;">
+                    <p class="section-label" style="text-align: left; margin-bottom: 0.5rem;">Nombre Completo:</p>
+                    <input type="text" id="custom-name" class="input-field-custom" placeholder="Ej. Juan Pérez">
+                </div>
+
                 <div class="input-group">
                     <p class="section-label" style="text-align: left; margin-bottom: 0.5rem;">Correo Institucional:</p>
                     <input type="email" id="custom-email" class="input-field-custom" placeholder="ejemplo@sansano.usm.cl" required>
@@ -312,13 +338,17 @@
                     <input type="password" id="custom-password" class="input-field-custom" placeholder="Ingresa tu contraseña" required>
                 </div>
 
+                <div id="confirm-password-group" class="input-group" style="display: none;">
+                    <p class="section-label" style="text-align: left; margin-bottom: 0.5rem;">Confirmar Contraseña:</p>
+                    <input type="password" id="custom-confirm-password" class="input-field-custom" placeholder="Repite tu contraseña" required>
+                </div>
+
                 <button id="btn-submit-login" class="send-btn" style="margin-top: 1rem; width: 100%;">
-                    <span>Guardar y Entrar</span>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="9" cy="7" r="4"></circle>
-                        <line x1="19" y1="8" x2="19" y2="14"></line>
-                        <line x1="22" y1="11" x2="16" y2="11"></line>
+                    <span id="btn-submit-text">Entrar</span>
+                    <svg id="btn-submit-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                        <polyline points="10 17 15 12 10 7"></polyline>
+                        <line x1="15" y1="12" x2="3" y2="12"></line>
                     </svg>
                 </button>
             </div>
@@ -357,6 +387,132 @@
 
             <div id="credentials-container" class="preview-grid" style="margin-top: 1rem;">
                 <!-- Aquí se inyectan las credenciales ordenadas -->
+            </div>
+        </div>
+
+        <!-- PÁGINA 6: PERFIL DE USUARIO -->
+        <div id="page-profile" class="glass-panel page-view" style="display: none;">
+            <div class="page-header">
+                <button class="back-btn" id="btn-back-profile" title="Volver al menú principal">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="19" y1="12" x2="5" y2="12"></line>
+                        <polyline points="12 19 5 12 12 5"></polyline>
+                    </svg>
+                    <span>Volver</span>
+                </button>
+                <div class="header-titles">
+                    <h2>Mi Perfil</h2>
+                    <p>Gestiona tus datos y reportes</p>
+                </div>
+                <div class="header-actions">
+                    <!-- Espacio para cuadrar el grid del header -->
+                </div>
+            </div>
+
+            <div class="profile-container" style="width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 1.5rem; margin: 0 auto 2rem auto;">
+                <div class="glass-panel" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; border-radius: 20px; width: 100%;">
+                    <div style="display: flex; align-items: center; gap: 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 1rem;">
+                        <div class="logo-placeholder" style="width: 60px; height: 60px; margin: 0; border-radius: 18px; font-size: 1.5rem; font-weight: 800; display: flex; align-items: center; justify-content: center; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); animation: none;" id="profile-avatar">
+                            U
+                        </div>
+                        <div>
+                            <h3 id="profile-display-name" style="color: white; font-weight: 700; margin: 0; font-size: 1.25rem;">Cargando...</h3>
+                            <p style="color: var(--text-secondary); margin: 0.25rem 0 0 0; font-size: 0.9rem;">Miembro UTFSM</p>
+                        </div>
+                    </div>
+                    
+                    <div class="input-group">
+                        <p class="section-label" style="text-align: left; margin-bottom: 0.5rem; color: var(--text-secondary);">Correo Electrónico:</p>
+                        <input type="email" id="profile-email" class="input-field-custom" style="opacity: 0.7; cursor: not-allowed;" readonly>
+                    </div>
+
+                    <div class="input-group">
+                        <p class="section-label" style="text-align: left; margin-bottom: 0.5rem;">Nombre Completo:</p>
+                        <input type="text" id="profile-name" class="input-field-custom" readonly>
+                    </div>
+
+                    <button id="btn-edit-profile" class="send-btn" style="margin-top: 0.5rem; width: 100%;">
+                        <span id="btn-edit-profile-text">Editar Perfil</span>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 6px;">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Botón Cerrar Sesión en la esquina inferior izquierda -->
+                <div style="display: flex; justify-content: flex-start; width: 100%; margin-top: -0.5rem;">
+                    <button id="btn-profile-logout" class="logout-btn" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.65rem 1.15rem; font-weight: 500; font-size: 0.95rem; width: auto;" title="Cerrar Sesión">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                        </svg>
+                        <span>Cerrar Sesión</span>
+                    </button>
+                </div>
+
+                <div style="margin-top: 1rem; width: 100%;">
+                    <h3 style="color: white; font-weight: 700; margin-bottom: 1rem; border-left: 4px solid var(--accent-color); padding-left: 10px;">Mis Reportes Realizados</h3>
+                    <div id="my-reports-container" class="preview-grid" style="display: flex; flex-direction: column; gap: 1rem; width: 100%;">
+                        <p style="color: rgba(255,255,255,0.3); text-align: center; padding: 2rem;">Cargando tus reportes...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PÁGINA 7: EDITAR DETALLES DEL PERFIL (LISTADO DE COSAS A EDITAR) -->
+        <div id="page-edit-profile" class="glass-panel page-view" style="display: none;">
+            <div class="page-header">
+                <button class="back-btn" id="btn-back-edit-profile" title="Volver al perfil">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="19" y1="12" x2="5" y2="12"></line>
+                        <polyline points="12 19 5 12 12 5"></polyline>
+                    </svg>
+                    <span>Volver</span>
+                </button>
+                <div class="header-titles">
+                    <h2>Editar Perfil</h2>
+                    <p>Selecciona y modifica tus datos</p>
+                </div>
+                <div class="header-actions">
+                    <!-- Espacio para cuadrar el grid del header -->
+                </div>
+            </div>
+
+            <div class="edit-profile-container" style="width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 1.5rem; margin: 0 auto 2rem auto;">
+                <!-- SECCIÓN 1: EDITAR NOMBRE -->
+                <div class="glass-panel" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; border-radius: 20px; width: 100%;">
+                    <h3 style="color: white; font-weight: 600; font-size: 1.1rem; margin: 0 0 0.5rem 0; border-left: 3px solid var(--accent-color); padding-left: 8px;">Modificar Nombre</h3>
+                    
+                    <div class="input-group">
+                        <p class="section-label" style="text-align: left; margin-bottom: 0.5rem;">Nombre Completo:</p>
+                        <input type="text" id="edit-custom-name" class="input-field-custom" placeholder="Ingresa tu nombre completo">
+                    </div>
+
+                    <button id="btn-save-name" class="send-btn" style="margin-top: 0.5rem; width: 100%;">
+                        <span>Guardar Nombre</span>
+                    </button>
+                </div>
+
+                <!-- SECCIÓN 2: EDITAR CONTRASEÑA -->
+                <div class="glass-panel" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; border-radius: 20px; width: 100%;">
+                    <h3 style="color: white; font-weight: 600; font-size: 1.1rem; margin: 0 0 0.5rem 0; border-left: 3px solid var(--purple); padding-left: 8px;">Cambiar Contraseña</h3>
+                    
+                    <div class="input-group">
+                        <p class="section-label" style="text-align: left; margin-bottom: 0.5rem;">Nueva Contraseña:</p>
+                        <input type="password" id="edit-custom-password" class="input-field-custom" placeholder="Ingresa tu nueva contraseña">
+                    </div>
+
+                    <div class="input-group">
+                        <p class="section-label" style="text-align: left; margin-bottom: 0.5rem;">Confirmar Contraseña:</p>
+                        <input type="password" id="edit-custom-confirm-password" class="input-field-custom" placeholder="Repite tu nueva contraseña">
+                    </div>
+
+                    <button id="btn-save-password" class="send-btn" style="margin-top: 0.5rem; width: 100%; background: linear-gradient(135deg, var(--purple), var(--accent-color));">
+                        <span>Guardar Contraseña</span>
+                    </button>
+                </div>
             </div>
         </div>
     </main>
