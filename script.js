@@ -43,6 +43,7 @@ const storage = firebase.storage();
 
 let categoriaSeleccionada = "";
 let currentUserEmail = null;
+let currentStaffCategory = null;
 
 // --- LÓGICA DE AUTENTICACIÓN ---
 const btnLogin = document.getElementById('btn-login');
@@ -54,10 +55,12 @@ const userEmailText = document.getElementById('user-email');
 
 // --- ELEMENTOS DE VISTA PREVIA DE IMAGEN ---
 const fileInput = document.getElementById('photo-upload');
+const cameraInput = document.getElementById('camera-upload');
 const uploadBtnText = document.getElementById('upload-btn-text');
 const previewContainer = document.getElementById('image-preview-container');
 const previewImage = document.getElementById('image-preview');
 const btnRemovePhoto = document.getElementById('btn-remove-photo');
+let currentSelectedFile = null;
 
 btnLogin.addEventListener('click', () => {
     auth.signInWithPopup(provider).catch(error => {
@@ -242,6 +245,7 @@ L.polygon(campusCoordinates, {
 let globalMarkers = []; // Array para guardar los pines actuales
 
 // --- NAVEGACIÓN ENTRE PÁGINAS (SPA) ---
+const pageWelcome = document.getElementById('page-welcome');
 const pageHome = document.getElementById('page-home');
 const pageReportForm = document.getElementById('page-report-form');
 const pageReportsList = document.getElementById('page-reports-list');
@@ -257,10 +261,12 @@ const btnGotoCredentials = document.getElementById('btn-goto-credentials');
 const btnBackCredentials = document.getElementById('btn-back-credentials');
 const btnBackProfile = document.getElementById('btn-back-profile');
 const btnBackEditProfile = document.getElementById('btn-back-edit-profile');
+const btnBackLogin = document.getElementById('btn-back-login');
 const backBtns = document.querySelectorAll('.back-btn');
 
 let myReportsUnsubscribe = null; // Guardar la desuscripción de reportes del perfil
 
+// The rest of navigateTo function remains unchanged
 function navigateTo(pageId) {
     // Desuscribirse de reportes del perfil si salimos de él
     if (pageId !== 'page-profile' && pageId !== 'page-edit-profile' && myReportsUnsubscribe) {
@@ -268,62 +274,160 @@ function navigateTo(pageId) {
         myReportsUnsubscribe = null;
     }
 
-    // Ocultar todas las páginas
-    [pageHome, pageReportForm, pageReportsList, pageLoginCustom, pageCredentialsList, pageProfile, pageEditProfile].forEach(page => {
+    if ((pageId === 'page-home' || pageId === 'page-welcome') && currentStaffCategory) {
+        currentStaffCategory = null;
+        activeCategoryFilter = "all";
+        document.querySelectorAll('.filter-btn[data-filter-type="category"]').forEach(b => {
+            b.style.display = 'inline-block';
+            if(b.getAttribute('data-filter-val') === "all") {
+                b.classList.add('active');
+            } else {
+                b.classList.remove('active');
+            }
+        });
+        Swal.fire({
+            title: 'Sesión Finalizada',
+            text: 'Has salido del modo encargado.',
+            icon: 'info',
+            timer: 1500,
+            showConfirmButton: false,
+            background: 'rgba(15, 23, 42, 0.9)'
+        });
+    }
+
+    // Staff login from welcome handled separately (no changes needed here)
+    // Reset staff state when returning to welcome page handled in initBackButtons via navigation
+
+    // Existing navigation logic (show/hide pages) continues as before
+    // Hide all pages
+    [pageWelcome, pageHome, pageReportForm, pageReportsList, pageLoginCustom, pageCredentialsList, pageProfile, pageEditProfile].forEach(page => {
         if (page) {
             page.style.display = 'none';
             page.classList.remove('active');
         }
     });
-
-    // Mostrar la página destino
+    // Show target page
     const targetPage = document.getElementById(pageId);
     if (targetPage) {
         targetPage.style.display = 'flex';
         targetPage.classList.add('active');
-
-        // Toggle visibilidad del botón de cerrar sesión custom en la Página 4
-        if (pageId === 'page-login-custom') {
-            const btnCustomLogout = document.getElementById('btn-custom-logout');
-            if (btnCustomLogout) {
-                if (localStorage.getItem('custom-user-email')) {
-                    btnCustomLogout.style.display = 'inline-flex';
-                } else {
-                    btnCustomLogout.style.display = 'none';
-                }
-            }
-            // Restablecer el formulario al modo login por defecto
-            if (typeof setLoginMode === 'function') {
-                setLoginMode('login');
-            }
-        }
-
-        // Cargar los datos del perfil si entramos en la Página 6
-        if (pageId === 'page-profile') {
-            if (typeof loadUserProfile === 'function') {
-                loadUserProfile();
-            }
-        }
-
-        // Cargar los datos a editar si entramos en la Página 7
-        if (pageId === 'page-edit-profile') {
-            if (typeof loadEditProfileFields === 'function') {
-                loadEditProfileFields();
-            }
-        }
-
-        // Invalidar tamaños de mapas según corresponda (crítico para Leaflet)
+        // Additional per-page logic (e.g., map invalidation) remains unchanged
         if (pageId === 'page-reports-list' && typeof globalMap !== 'undefined') {
-            setTimeout(() => {
-                globalMap.invalidateSize();
-            }, 100);
+            setTimeout(() => globalMap.invalidateSize(), 100);
+            // Set default filter to 'today' for regular users (non-staff)
+            if (!currentStaffCategory) {
+                activeSpecialFilter = 'today';
+                document.querySelectorAll('.filter-btn[data-filter-type="special"]').forEach(b => {
+                    if (b.getAttribute('data-filter-val') === 'today') {
+                        b.classList.add('active');
+                    } else {
+                        b.classList.remove('active');
+                    }
+                });
+                renderFilteredReports();
+            }
         } else if (pageId === 'page-report-form' && typeof formMap !== 'undefined') {
-            setTimeout(() => {
-                formMap.invalidateSize();
-            }, 100);
+            setTimeout(() => formMap.invalidateSize(), 100);
         }
     }
 }
+
+// Back button listeners are set up below (lines ~516-529) with correct per-page navigation.
+// No need for a blanket initBackButtons override.
+
+// Request Notification permission on first load
+function requestNotificationPermission() {
+    if ("Notification" in window) {
+        Notification.requestPermission().then(permission => {
+            if (permission === "granted") {
+                new Swal({
+                    title: 'Notificaciones Activadas',
+                    text: '¡Gracias! Recibirás alertas de nuevos reportes y actualizaciones.',
+                    icon: 'success',
+                    confirmButtonColor: '#3b82f6',
+                    background: 'rgba(15, 23, 42, 0.9)'
+                });
+            } else if (permission === "denied") {
+                new Swal({
+                    title: 'Notificaciones Desactivadas',
+                    text: 'Puedes habilitarlas más tarde en la configuración del navegador.',
+                    icon: 'info',
+                    confirmButtonColor: '#3b82f6',
+                    background: 'rgba(15, 23, 42, 0.9)'
+                });
+            }
+        });
+    }
+}
+
+// Call initialization functions after DOM loaded
+document.addEventListener('DOMContentLoaded', () => {
+    requestNotificationPermission();
+});
+
+// --- Welcome Staff Button ---
+const btnWelcomeStaff = document.getElementById('btn-welcome-staff');
+if (btnWelcomeStaff) {
+    btnWelcomeStaff.addEventListener('click', () => {
+        Swal.fire({
+            title: 'Acceso Personal',
+            text: 'Ingrese su contraseña de acceso:',
+            input: 'password',
+            inputAttributes: {
+                autocapitalize: 'off',
+                autocorrect: 'off'
+            },
+            showCancelButton: true,
+            confirmButtonText: 'Entrar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#3b82f6',
+            background: 'rgba(15, 23, 42, 0.9)'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                let section = null;
+                if (result.value === '6767') section = 'Seguridad';
+                else if (result.value === '6969') section = 'Salud';
+                else if (result.value === '1313') section = 'Equidad de Género';
+
+                if (section) {
+                    currentStaffCategory = section;
+                    Swal.fire({
+                        title: 'Acceso Concedido',
+                        text: 'Has ingresado como Encargado de ' + section,
+                        icon: 'success',
+                        confirmButtonColor: '#3b82f6',
+                        background: 'rgba(15, 23, 42, 0.9)'
+                    }).then(() => {
+                        navigateTo('page-reports-list');
+                        // Show ALL category buttons but pre-select staff's department
+                        document.querySelectorAll('.filter-btn[data-filter-type="category"]').forEach(b => {
+                            b.style.display = 'inline-block';
+                            if (b.getAttribute('data-filter-val') === section) {
+                                b.classList.add('active');
+                            } else {
+                                b.classList.remove('active');
+                            }
+                        });
+                        // Reset special filter for staff view
+                        activeSpecialFilter = 'all';
+                        document.querySelectorAll('.filter-btn[data-filter-type="special"]').forEach(b => b.classList.remove('active'));
+                        activeCategoryFilter = section;
+                        renderFilteredReports();
+                    });
+                } else {
+                    Swal.fire({
+                        title: 'Acceso Denegado',
+                        text: 'Contraseña incorrecta.',
+                        icon: 'error',
+                        confirmButtonColor: '#3b82f6',
+                        background: 'rgba(15, 23, 42, 0.9)'
+                    });
+                }
+            }
+        });
+    });
+}
+
 
 if (btnGotoReport) {
     btnGotoReport.addEventListener('click', () => navigateTo('page-report-form'));
@@ -333,13 +437,43 @@ if (btnGotoList) {
 }
 if (btnHomeLogin) {
     btnHomeLogin.addEventListener('click', () => {
+        // If user is logged in, go to profile; otherwise go to welcome for login options
         if (localStorage.getItem('custom-user-email')) {
             navigateTo('page-profile');
         } else {
-            navigateTo('page-login-custom');
+            navigateTo('page-welcome');
         }
     });
 }
+
+const btnWelcomeLogin = document.getElementById('btn-welcome-login');
+const btnWelcomeRegister = document.getElementById('btn-welcome-register');
+const btnWelcomeGuest = document.getElementById('btn-welcome-guest');
+
+if (btnWelcomeLogin) {
+    btnWelcomeLogin.addEventListener('click', () => {
+        navigateTo('page-login-custom');
+        setLoginMode('login');
+    });
+}
+if (btnWelcomeRegister) {
+    btnWelcomeRegister.addEventListener('click', () => {
+        navigateTo('page-login-custom');
+        setLoginMode('register');
+    });
+}
+if (btnWelcomeGuest) {
+    btnWelcomeGuest.addEventListener('click', () => {
+        // Clear any existing session so user enters as true guest
+        localStorage.removeItem('custom-user-email');
+        localStorage.removeItem('custom-user-name');
+        const loginSpan = document.querySelector('#btn-home-login span');
+        if (loginSpan) loginSpan.textContent = 'Iniciar Sesión';
+        navigateTo('page-home');
+    });
+}
+
+// btn-staff-login removed from page-home (login options are now on welcome page)
 if (btnGotoCredentials) {
     btnGotoCredentials.addEventListener('click', () => {
         Swal.fire({
@@ -385,8 +519,11 @@ if (btnBackProfile) {
 if (btnBackEditProfile) {
     btnBackEditProfile.addEventListener('click', () => navigateTo('page-profile'));
 }
+if (btnBackLogin) {
+    btnBackLogin.addEventListener('click', () => navigateTo('page-welcome'));
+}
 backBtns.forEach(btn => {
-    if (btn.id !== 'btn-back-credentials' && btn.id !== 'btn-back-profile' && btn.id !== 'btn-back-edit-profile') {
+    if (btn.id !== 'btn-back-credentials' && btn.id !== 'btn-back-profile' && btn.id !== 'btn-back-edit-profile' && btn.id !== 'btn-back-login') {
         btn.addEventListener('click', () => navigateTo('page-home'));
     }
 });
@@ -419,7 +556,7 @@ btnEnviar.addEventListener('click', async () => {
     }
 
     const comentario = inputComentario.value;
-    const file = fileInput.files[0];
+    const file = currentSelectedFile;
 
     if (comentario.trim() === "" || categoriaSeleccionada === "") {
         Swal.fire('Faltan Datos', 'Por favor, escribe un comentario y selecciona una categoría (Seguridad, Salud o Género).', 'warning');
@@ -479,6 +616,8 @@ btnEnviar.addEventListener('click', async () => {
         inputComentario.value = "";
         categoriaSeleccionada = "";
         fileInput.value = "";
+        if (cameraInput) cameraInput.value = "";
+        currentSelectedFile = null;
         botonesCategoria.forEach(b => {
             b.classList.remove('active');
             b.style.border = "none";
@@ -554,6 +693,8 @@ function renderFilteredReports() {
 
     // 1. Filtrar los reportes en base a la selección activa
     let filtered = [...currentReports];
+
+
 
     // Filtrar por categoría
     if (activeCategoryFilter !== "all") {
@@ -675,6 +816,15 @@ function renderFilteredReports() {
                     </svg>
                     <span id="comment-count-${reporteId}">0</span>
                 </button>
+                ${currentStaffCategory ? `
+                <button class="report-action-btn delete-report-btn" title="Borrar Reporte" style="color: var(--danger); border-color: rgba(239, 68, 68, 0.3);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                    <span>Borrar</span>
+                </button>
+                ` : ''}
             </div>
             
             <!-- Sección Colapsable de Comentarios -->
@@ -693,21 +843,7 @@ function renderFilteredReports() {
                         </button>
                     </div>
                     
-                    <!-- Controles de Respuesta Oficial -->
-                    <div class="official-comment-controls">
-                        <label class="official-toggle-label">
-                            <input type="checkbox" class="official-check" style="cursor: pointer;">
-                            👮 Responder como Personal del Campus (Simulación)
-                        </label>
-                        <div class="official-fields" style="display: none; align-items: center; gap: 0.4rem; width: 100%; margin-top: 4px;">
-                            <select class="official-select">
-                                <option value="Guardia de Seguridad">👮 Guardia de Seguridad</option>
-                                <option value="Personal de Enfermería">🩺 Enfermería</option>
-                                <option value="Administración Campus">🏛️ Administración</option>
-                            </select>
-                            <input type="password" class="official-pin" placeholder="PIN Oficial (1234)" style="width: 120px;">
-                        </div>
-                    </div>
+                    
                 </form>
             </div>
         `;
@@ -755,24 +891,51 @@ function renderFilteredReports() {
             }
         });
 
+        // X. Borrar Reporte (Solo Encargados)
+        if (currentStaffCategory) {
+            const deleteReportBtn = tarjeta.querySelector('.delete-report-btn');
+            if (deleteReportBtn) {
+                deleteReportBtn.addEventListener('click', () => {
+                    Swal.fire({
+                        title: '¿Borrar Publicación?',
+                        text: "Esta acción no se puede deshacer.",
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonColor: '#ef4444',
+                        cancelButtonColor: '#64748b',
+                        confirmButtonText: 'Sí, borrar',
+                        cancelButtonText: 'Cancelar',
+                        background: 'rgba(15, 23, 42, 0.9)'
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            db.collection("reportes").doc(reporteId).delete().then(() => {
+                                Swal.fire('Borrado', 'La publicación ha sido eliminada.', 'success');
+                                renderFilteredReports();
+                            }).catch(error => {
+                                Swal.fire('Error', 'No se pudo borrar: ' + error.message, 'error');
+                            });
+                        }
+                    });
+                });
+            }
+        }
+
         // 4. Mostrar/Ocultar campos de comentario oficial
-        const officialCheck = tarjeta.querySelector('.official-check');
-        const officialFields = tarjeta.querySelector('.official-fields');
-        officialCheck.addEventListener('change', () => {
-            officialFields.style.display = officialCheck.checked ? 'flex' : 'none';
-        });
+        
 
         // 5. Enviar Comentario (con soporte de perfiles oficiales)
         const commentForm = tarjeta.querySelector('.comment-form');
         commentForm.addEventListener('submit', (e) => {
             e.preventDefault();
-            const input = commentForm.querySelector('.comment-input');
-            const text = input.value.trim();
+            let isOfficial = !!currentStaffCategory;
+            let role = isOfficial ? "Encargado de " + currentStaffCategory : "Normal";
             
-            const isOfficial = officialCheck.checked;
-            let role = "Normal";
+            if (!isOfficial) {
+                const officialCheck = commentForm.querySelector('.official-checkbox');
+                isOfficial = officialCheck ? officialCheck.checked : false;
+            }
             
-            if (isOfficial) {
+            if (isOfficial && !currentStaffCategory) {
                 const selectRole = commentForm.querySelector('.official-select').value;
                 const pin = commentForm.querySelector('.official-pin').value;
                 
@@ -799,9 +962,7 @@ function renderFilteredReports() {
                     rolOficial: role
                 }).then(() => {
                     input.value = '';
-                    officialCheck.checked = false;
-                    officialFields.style.display = 'none';
-                    commentForm.querySelector('.official-pin').value = '';
+                    
                 }).catch(error => {
                     Swal.fire('Error', 'No se pudo publicar el comentario: ' + error.message, 'error');
                 });
@@ -855,14 +1016,49 @@ function renderFilteredReports() {
                             </div>
                             <p class="comment-text" style="${commentData.esOficial ? 'font-weight: 600; color: #fef08a;' : ''}">${commentData.texto}</p>
                         </div>
-                        <button class="comment-like-btn ${commentIsLiked ? 'active' : ''}" title="Me gusta">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="${commentIsLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
-                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-                            </svg>
-                            <span>${commentData.likes || 0}</span>
-                        </button>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <button class="comment-like-btn ${commentIsLiked ? 'active' : ''}" title="Me gusta">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="${commentIsLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
+                                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                                </svg>
+                                <span>${commentData.likes || 0}</span>
+                            </button>
+                            ${currentStaffCategory ? `
+                            <button class="comment-delete-btn" title="Borrar comentario" style="background: transparent; border: 1px solid var(--danger); border-radius: 20px; padding: 4px 8px; color: var(--danger); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
+                                </svg>
+                            </button>
+                            ` : ''}
+                        </div>
                     `;
                     
+                    // Click para borrar el Comentario (Solo Encargados)
+                    if (currentStaffCategory) {
+                        const commentDeleteBtn = commentDiv.querySelector('.comment-delete-btn');
+                        if (commentDeleteBtn) {
+                            commentDeleteBtn.addEventListener('click', () => {
+                                Swal.fire({
+                                    title: '¿Borrar Comentario?',
+                                    icon: 'warning',
+                                    showCancelButton: true,
+                                    confirmButtonColor: '#ef4444',
+                                    cancelButtonColor: '#64748b',
+                                    confirmButtonText: 'Sí, borrar',
+                                    cancelButtonText: 'Cancelar',
+                                    background: 'rgba(15, 23, 42, 0.9)'
+                                }).then((result) => {
+                                    if (result.isConfirmed) {
+                                        db.collection("reportes").doc(reporteId).collection("comentarios").doc(commentId).delete().catch(error => {
+                                            Swal.fire('Error', 'No se pudo borrar el comentario: ' + error.message, 'error');
+                                        });
+                                    }
+                                });
+                            });
+                        }
+                    }
+
                     // Click para Like en el Comentario
                     const commentLikeBtn = commentDiv.querySelector('.comment-like-btn');
                     commentLikeBtn.addEventListener('click', () => {
@@ -953,64 +1149,118 @@ function getColor(categoria) {
 }
 
 // --- MANEJO DE VISTA PREVIA DE LA IMAGEN ---
-fileInput.addEventListener('change', () => {
-    const file = fileInput.files[0];
-    if (file) {
-        // Validar que el archivo sea una imagen
-        if (!file.type.startsWith('image/')) {
-            Swal.fire({
-                title: 'Archivo no válido',
-                text: 'Por favor selecciona un archivo de tipo imagen.',
-                icon: 'warning',
-                confirmButtonColor: '#3b82f6',
-                background: 'rgba(15, 23, 42, 0.9)'
-            });
-            fileInput.value = '';
-            return;
-        }
+function handleFileSelection(file) {
+    if (!file) return;
 
-        // Validación de tamaño (20 MB máximo)
-        const maxSizeInBytes = 20 * 1024 * 1024; // 20 MB
-        if (file.size > maxSizeInBytes) {
-            Swal.fire({
-                title: 'Archivo demasiado grande',
-                text: `Tu archivo pesa ${(file.size / (1024 * 1024)).toFixed(1)} MB. El límite máximo permitido es de 20 MB.`,
-                icon: 'warning',
-                confirmButtonColor: '#3b82f6',
-                background: 'rgba(15, 23, 42, 0.9)'
-            });
-            fileInput.value = ''; // Limpiamos el input
-            return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            previewImage.src = e.target.result;
-            previewContainer.style.display = 'flex';
-            if (uploadBtnText) uploadBtnText.textContent = 'Cambiar Foto';
-            
-            // Reajustar tamaño de los mapas por si el layout se desplaza
-            setTimeout(() => {
-                formMap.invalidateSize();
-                globalMap.invalidateSize();
-            }, 300);
-        };
-        reader.readAsDataURL(file);
+    // Validar que el archivo sea una imagen
+    if (!file.type.startsWith('image/')) {
+        Swal.fire({
+            title: 'Archivo no válido',
+            text: 'Por favor selecciona un archivo de tipo imagen.',
+            icon: 'warning',
+            confirmButtonColor: '#3b82f6',
+            background: 'rgba(15, 23, 42, 0.9)'
+        });
+        return;
     }
+
+    // Validación de tamaño (20 MB máximo)
+    const maxSizeInBytes = 20 * 1024 * 1024; // 20 MB
+    if (file.size > maxSizeInBytes) {
+        Swal.fire({
+            title: 'Archivo demasiado grande',
+            text: `Tu archivo pesa ${(file.size / (1024 * 1024)).toFixed(1)} MB. El límite máximo permitido es de 20 MB.`,
+            icon: 'warning',
+            confirmButtonColor: '#3b82f6',
+            background: 'rgba(15, 23, 42, 0.9)'
+        });
+        return;
+    }
+
+    currentSelectedFile = file;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        previewImage.src = e.target.result;
+        previewContainer.style.display = 'flex';
+        if (uploadBtnText) uploadBtnText.textContent = 'Cambiar Foto';
+        
+        // Reajustar tamaño de los mapas por si el layout se desplaza
+        setTimeout(() => {
+            if (typeof formMap !== 'undefined') formMap.invalidateSize();
+            if (typeof globalMap !== 'undefined') globalMap.invalidateSize();
+        }, 300);
+    };
+    reader.readAsDataURL(file);
+}
+
+fileInput.addEventListener('change', () => {
+    handleFileSelection(fileInput.files[0]);
 });
+
+if (cameraInput) {
+    cameraInput.addEventListener('change', () => {
+        handleFileSelection(cameraInput.files[0]);
+    });
+}
 
 btnRemovePhoto.addEventListener('click', () => {
     fileInput.value = '';
+    if (cameraInput) cameraInput.value = '';
+    currentSelectedFile = null;
     previewImage.src = '';
     previewContainer.style.display = 'none';
     if (uploadBtnText) uploadBtnText.textContent = 'Elegir Foto';
     
     // Reajustar tamaño de los mapas por si el layout se desplaza
     setTimeout(() => {
-        formMap.invalidateSize();
-        globalMap.invalidateSize();
+        if (typeof formMap !== 'undefined') formMap.invalidateSize();
+        if (typeof globalMap !== 'undefined') globalMap.invalidateSize();
     }, 300);
 });
+
+// Webcam Modal para PC
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+const cameraBtnWrapper = document.querySelector('.camera-btn');
+const webcamModal = document.getElementById('webcam-modal');
+const webcamVideo = document.getElementById('webcam-video');
+const webcamCanvas = document.getElementById('webcam-canvas');
+const btnCaptureWebcam = document.getElementById('btn-capture-webcam');
+const btnCloseWebcam = document.getElementById('btn-close-webcam');
+
+if (!isMobile && cameraBtnWrapper && webcamModal) {
+    cameraBtnWrapper.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            webcamVideo.srcObject = stream;
+            webcamModal.style.display = 'flex';
+        } catch (err) {
+            Swal.fire('Error', 'No se pudo acceder a la cámara.', 'error');
+        }
+    });
+
+    btnCaptureWebcam.addEventListener('click', () => {
+        webcamCanvas.width = webcamVideo.videoWidth;
+        webcamCanvas.height = webcamVideo.videoHeight;
+        webcamCanvas.getContext('2d').drawImage(webcamVideo, 0, 0);
+        
+        webcamCanvas.toBlob((blob) => {
+            const file = new File([blob], "webcam-photo.jpg", { type: "image/jpeg" });
+            handleFileSelection(file);
+            closeWebcam();
+        }, 'image/jpeg', 0.9);
+    });
+
+    btnCloseWebcam.addEventListener('click', closeWebcam);
+    
+    function closeWebcam() {
+        if (webcamVideo.srcObject) {
+            webcamVideo.srcObject.getTracks().forEach(track => track.stop());
+        }
+        webcamModal.style.display = 'none';
+    }
+}
 
 // --- LÓGICA DE ACCESIBILIDAD ---
 const btnSettingsTriggers = document.querySelectorAll('.btn-settings-trigger');
@@ -1130,13 +1380,13 @@ function setLoginMode(mode) {
     } else {
         if (tabLoginMode) tabLoginMode.classList.remove('active');
         if (tabRegisterMode) tabRegisterMode.classList.add('active');
-        if (loginHeaderTitle) loginHeaderTitle.textContent = "Crear Cuenta";
+        if (loginHeaderTitle) loginHeaderTitle.textContent = "Registrarse";
         if (loginHeaderSubtitle) loginHeaderSubtitle.textContent = "Registra una cuenta institucional USM";
         if (confirmPasswordGroup) confirmPasswordGroup.style.display = 'block';
         if (nameGroup) nameGroup.style.display = 'block';
         if (inputCustomConfirmPassword) inputCustomConfirmPassword.setAttribute('required', 'true');
         if (inputCustomName) inputCustomName.setAttribute('required', 'true');
-        if (btnSubmitText) btnSubmitText.textContent = "Crear Cuenta y Entrar";
+        if (btnSubmitText) btnSubmitText.textContent = "Registrarse y Entrar";
         if (btnSubmitIcon) {
             btnSubmitIcon.innerHTML = `
                 <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -1170,6 +1420,30 @@ if (btnSubmitLogin) {
                 background: 'rgba(15, 23, 42, 0.9)'
             });
             return;
+        }
+
+        if (currentLoginMode === 'register') {
+            if (!name || name.length < 2) {
+                Swal.fire({
+                    title: 'Nombre Inválido',
+                    text: 'El nombre debe tener al menos 2 letras.',
+                    icon: 'warning',
+                    confirmButtonColor: '#3b82f6',
+                    background: 'rgba(15, 23, 42, 0.9)'
+                });
+                return;
+            }
+
+            if (password.length < 6 || !/[A-Z]/.test(password)) {
+                Swal.fire({
+                    title: 'Contraseña Débil',
+                    text: 'La contraseña debe tener al menos 6 caracteres y contener al menos 1 letra mayúscula.',
+                    icon: 'warning',
+                    confirmButtonColor: '#3b82f6',
+                    background: 'rgba(15, 23, 42, 0.9)'
+                });
+                return;
+            }
         }
 
         if (currentLoginMode === 'register' && !name) {
@@ -1239,7 +1513,7 @@ if (btnSubmitLogin) {
                 if (querySnapshot.empty) {
                     Swal.fire({
                         title: 'Usuario No Registrado',
-                        text: 'Este correo no está registrado en el sistema. Selecciona "Crear Cuenta" para registrarte.',
+                        text: 'Este correo no está registrado en el sistema. Selecciona "Registrarse" para crear tu cuenta.',
                         icon: 'warning',
                         confirmButtonColor: '#3b82f6',
                         background: 'rgba(15, 23, 42, 0.9)'
@@ -1848,7 +2122,7 @@ function handleLogout() {
         confirmButtonColor: '#3b82f6',
         background: 'rgba(15, 23, 42, 0.9)'
     }).then(() => {
-        navigateTo('page-home');
+        navigateTo('page-welcome');
     });
 }
 
@@ -1860,3 +2134,13 @@ if (btnCustomLogout) {
 if (btnProfileLogout) {
     btnProfileLogout.addEventListener('click', handleLogout);
 }
+
+// --- INICIALIZACIÓN DE LA APP ---
+window.addEventListener('DOMContentLoaded', () => {
+    // Redirigir a Home (Dashboard) si ya hay sesión iniciada, si no, mantener en Welcome
+    if (localStorage.getItem('custom-user-email')) {
+        navigateTo('page-home');
+    } else {
+        navigateTo('page-welcome');
+    }
+});
