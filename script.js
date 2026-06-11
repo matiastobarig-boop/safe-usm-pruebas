@@ -75,7 +75,7 @@ btnLogout.addEventListener('click', () => {
 /* DESACTIVADO TEMPORALMENTE PARA PRUEBAS DE FOTO
 auth.onAuthStateChanged(user => {
     if (user) {
-        if (user.email.endsWith('@usm.cl') || user.email.endsWith('@sansano.usm.cl')) {
+        if (user.email.endsWith('@usm.cl') || user.email.endsWith('@sansano.usm.cl') || user.email.endsWith('@sansano.cl')) {
             currentUserEmail = user.email;
             userEmailText.textContent = `Conectado como: ${user.email}`;
             loginSection.style.display = 'none';
@@ -85,7 +85,7 @@ auth.onAuthStateChanged(user => {
             setTimeout(() => { formMap.invalidateSize(); }, 300);
         } else {
             auth.signOut();
-            Swal.fire('Acceso Denegado', 'Debes usar un correo institucional de la USM (@usm.cl o @sansano.usm.cl).', 'error');
+            Swal.fire('Acceso Denegado', 'Debes usar un correo institucional de la USM (@usm.cl, @sansano.usm.cl o @sansano.cl).', 'error');
         }
     } else {
         currentUserEmail = null;
@@ -152,6 +152,117 @@ const campusCoordinates = [
     [-33.4899900, -70.6205564]
 ];
 
+// --- SECTORES DEL CAMPUS SAN JOAQUÍN ---
+const sectorEdificiosE = [
+    [-33.48940, -70.62060],
+    [-33.48940, -70.62035],
+    [-33.49040, -70.62035],
+    [-33.49040, -70.62060]
+];
+
+const sectorEdificioB = [
+    [-33.48940, -70.62035],
+    [-33.48940, -70.61910],
+    [-33.49010, -70.61910],
+    [-33.49010, -70.62035]
+];
+
+const sectorEdificioF = [
+    [-33.48940, -70.61910],
+    [-33.48940, -70.61800],
+    [-33.49040, -70.61800],
+    [-33.49040, -70.61910]
+];
+
+const sectorCanchas = [
+    [-33.49010, -70.62020],
+    [-33.49010, -70.61910],
+    [-33.49130, -70.61910],
+    [-33.49130, -70.62020]
+];
+
+const sectorEdificioC = [
+    [-33.49040, -70.61910],
+    [-33.49040, -70.61870],
+    [-33.49110, -70.61870],
+    [-33.49110, -70.61910]
+];
+
+const sectorEdificioA = [
+    [-33.48990, -70.61870],
+    [-33.48990, -70.61800],
+    [-33.49150, -70.61800],
+    [-33.49150, -70.61870]
+];
+
+const sectorEdificioK = [
+    [-33.49130, -70.62020],
+    [-33.49130, -70.61830],
+    [-33.49180, -70.61830],
+    [-33.49180, -70.62020]
+];
+
+let sectores = [
+    { name: "Edificios E (E1, E2, E3)", polygon: sectorEdificiosE, color: "#6b7280" },
+    { name: "Edificio B", polygon: sectorEdificioB, color: "#f59e0b" },
+    { name: "Edificio F", polygon: sectorEdificioF, color: "#10b981" },
+    { name: "Canchas de Fútbol", polygon: sectorCanchas, color: "#22c55e" },
+    { name: "Edificio C", polygon: sectorEdificioC, color: "#8b5cf6" },
+    { name: "Edificio A", polygon: sectorEdificioA, color: "#3b82f6" },
+    { name: "Futuro Edificio K", polygon: sectorEdificioK, color: "#ec4899" }
+];
+
+let editorMap;
+let editorPolygon = null;
+let editorMarkers = [];
+let tempSectores = [];
+let editorBackgroundPolygons = [];
+
+function getSectorFromCoords(lat, lng) {
+    for (const sec of sectores) {
+        if (isPointInPolygon(lat, lng, sec.polygon)) {
+            return sec.name;
+        }
+    }
+    return "Patios y Áreas Verdes";
+}
+
+function updateDetectedSector() {
+    const sector = getSectorFromCoords(currentLat, currentLng);
+    const badge = document.getElementById('detected-sector-badge');
+    if (badge) {
+        badge.textContent = sector;
+        const secObj = sectores.find(s => s.name === sector);
+        if (secObj) {
+            badge.style.backgroundColor = secObj.color + '26';
+            badge.style.color = secObj.color;
+            badge.style.borderColor = secObj.color + '4d';
+        } else {
+            badge.style.backgroundColor = 'rgba(99, 102, 241, 0.15)';
+            badge.style.color = '#818cf8';
+            badge.style.borderColor = 'rgba(99, 102, 241, 0.3)';
+        }
+    }
+}
+
+// Cargar sectores personalizados de Firestore al iniciar el script si existen
+try {
+    db.collection("config").doc("map_sectors").get().then(doc => {
+        if (doc.exists && doc.data().sectores) {
+            // Firestore no soporta arreglos anidados, por lo que las coordenadas vienen como {lat, lng}
+            // Las convertimos de vuelta a [lat, lng] para mantener la compatibilidad con el resto del código
+            sectores = doc.data().sectores.map(sec => ({
+                name: sec.name,
+                color: sec.color,
+                polygon: sec.polygon.map(p => Array.isArray(p) ? p : [p.lat, p.lng])
+            }));
+            updateDetectedSector();
+        }
+    });
+} catch (e) {
+    console.warn("Error al precargar sectores desde Firestore:", e);
+}
+
 // 1. Mapa del Formulario
 const formMap = L.map('form-map', mapOptions).setView(usmSanJoaquin, 17);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
@@ -162,7 +273,7 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r
 L.polygon(campusCoordinates, {
     color: '#3b82f6',
     fillColor: '#3b82f6',
-    fillOpacity: 0.08,
+    fillOpacity: 0.04,
     weight: 2,
     dashArray: '5, 8'
 }).addTo(formMap);
@@ -174,11 +285,13 @@ formMarker.on('dragend', function(e) {
     if (isPointInPolygon(pos.lat, pos.lng, campusCoordinates)) {
         currentLat = pos.lat;
         currentLng = pos.lng;
+        updateDetectedSector();
     } else {
         // Devolver el marcador al centro si se arrastra fuera
         formMarker.setLatLng(usmSanJoaquin);
         currentLat = usmSanJoaquin[0];
         currentLng = usmSanJoaquin[1];
+        updateDetectedSector();
         Swal.fire('Ubicación Inválida', 'Por favor, arrastra el marcador dentro del área del campus delimitada en azul.', 'warning');
     }
 });
@@ -189,6 +302,7 @@ formMap.on('click', function(e) {
         formMarker.setLatLng(e.latlng);
         currentLat = e.latlng.lat;
         currentLng = e.latlng.lng;
+        updateDetectedSector();
     } else {
         Swal.fire('Ubicación Inválida', 'Debes hacer clic dentro de la zona del campus delimitada en azul.', 'warning');
     }
@@ -212,6 +326,7 @@ btnLocation.addEventListener('click', () => {
                     formMap.setView(newPos, 18);
                     formMarker.setLatLng(newPos);
                     locationStatus.textContent = "Ubicación obtenida.";
+                    updateDetectedSector();
                 } else {
                     locationStatus.textContent = "Ubicación fuera del campus.";
                     Swal.fire('Ubicación Fuera de Rango', 'Tu ubicación actual está fuera del área del campus delimitada en azul. El marcador se mantendrá en el centro del campus.', 'warning');
@@ -237,10 +352,13 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r
 L.polygon(campusCoordinates, {
     color: '#3b82f6',
     fillColor: '#3b82f6',
-    fillOpacity: 0.08,
+    fillOpacity: 0.04,
     weight: 2,
     dashArray: '5, 8'
 }).addTo(globalMap);
+
+// Inicializar el sector por primera vez en el badge
+updateDetectedSector();
 
 let globalMarkers = []; // Array para guardar los pines actuales
 
@@ -253,6 +371,8 @@ const pageLoginCustom = document.getElementById('page-login-custom');
 const pageCredentialsList = document.getElementById('page-credentials-list');
 const pageProfile = document.getElementById('page-profile');
 const pageEditProfile = document.getElementById('page-edit-profile');
+const pageAiRules = document.getElementById('page-ai-rules');
+const pageEditMapSectors = document.getElementById('page-edit-map-sectors');
 
 const btnGotoReport = document.getElementById('btn-goto-report');
 const btnGotoList = document.getElementById('btn-goto-list');
@@ -300,7 +420,7 @@ function navigateTo(pageId) {
 
     // Existing navigation logic (show/hide pages) continues as before
     // Hide all pages
-    [pageWelcome, pageHome, pageReportForm, pageReportsList, pageLoginCustom, pageCredentialsList, pageProfile, pageEditProfile].forEach(page => {
+    [pageWelcome, pageHome, pageReportForm, pageReportsList, pageLoginCustom, pageCredentialsList, pageProfile, pageEditProfile, pageAiRules, pageEditMapSectors].forEach(page => {
         if (page) {
             page.style.display = 'none';
             page.classList.remove('active');
@@ -328,6 +448,27 @@ function navigateTo(pageId) {
             }
         } else if (pageId === 'page-report-form' && typeof formMap !== 'undefined') {
             setTimeout(() => formMap.invalidateSize(), 100);
+        } else if (pageId === 'page-edit-map-sectors') {
+            setTimeout(() => {
+                if (typeof editorMap !== 'undefined') {
+                    editorMap.invalidateSize();
+                } else {
+                    setupEditorMap();
+                }
+                loadSectorsInEditorList();
+            }, 100);
+        } else if (pageId === 'page-ai-rules') {
+            loadAiRules();
+        } else if (pageId === 'page-home') {
+            const userEmail = localStorage.getItem('custom-user-email');
+            const btnGotoList = document.getElementById('btn-goto-list');
+            if (btnGotoList) {
+                if (userEmail) {
+                    btnGotoList.style.display = 'flex';
+                } else {
+                    btnGotoList.style.display = 'none';
+                }
+            }
         }
     }
 }
@@ -363,6 +504,190 @@ function requestNotificationPermission() {
 // Call initialization functions after DOM loaded
 document.addEventListener('DOMContentLoaded', () => {
     requestNotificationPermission();
+    
+    // Configurar botones de edición de sectores con contraseña 1234
+    const btnEditSectors = document.getElementById('btn-edit-sectors');
+    if (btnEditSectors) {
+        btnEditSectors.addEventListener('click', promptForSectorEditing);
+    }
+    
+    const btnEditSectorsGlobal = document.getElementById('btn-edit-sectors-global');
+    if (btnEditSectorsGlobal) {
+        btnEditSectorsGlobal.addEventListener('click', promptForSectorEditing);
+    }
+
+    const btnBackEditMapSectors = document.getElementById('btn-back-edit-map-sectors');
+    if (btnBackEditMapSectors) {
+        btnBackEditMapSectors.addEventListener('click', () => navigateTo('page-home'));
+    }
+
+    // Inicializar escuchas del formulario de edición de sectores
+    const selectSector = document.getElementById('editor-sector-select');
+    if (selectSector) {
+        selectSector.addEventListener('change', (e) => {
+            loadSectorInEditor(parseInt(e.target.value, 10));
+        });
+    }
+
+    const nameInput = document.getElementById('editor-sector-name');
+    if (nameInput) {
+        nameInput.addEventListener('input', (e) => {
+            const select = document.getElementById('editor-sector-select');
+            if (!select) return;
+            const index = parseInt(select.value, 10);
+            if (index >= 0 && index < tempSectores.length) {
+                tempSectores[index].name = e.target.value;
+                select.options[index].text = e.target.value;
+            }
+        });
+    }
+
+    const colorInput = document.getElementById('editor-sector-color');
+    const colorHexInput = document.getElementById('editor-sector-color-hex');
+
+    if (colorInput && colorHexInput) {
+        colorInput.addEventListener('input', (e) => {
+            const val = e.target.value;
+            colorHexInput.value = val;
+            updateActiveSectorColor(val);
+        });
+        colorHexInput.addEventListener('input', (e) => {
+            let val = e.target.value;
+            if (val.startsWith('#') && val.length === 7) {
+                colorInput.value = val;
+                updateActiveSectorColor(val);
+            }
+        });
+    }
+
+    const btnAddVertex = document.getElementById('btn-editor-add-vertex');
+    if (btnAddVertex) {
+        btnAddVertex.addEventListener('click', () => {
+            const select = document.getElementById('editor-sector-select');
+            if (!select) return;
+            const index = parseInt(select.value, 10);
+            if (index >= 0 && index < tempSectores.length) {
+                const center = editorMap.getCenter();
+                tempSectores[index].polygon.push([center.lat, center.lng]);
+                loadSectorInEditor(index);
+            }
+        });
+    }
+
+    const btnDeleteVertex = document.getElementById('btn-editor-delete-vertex');
+    if (btnDeleteVertex) {
+        btnDeleteVertex.addEventListener('click', () => {
+            const select = document.getElementById('editor-sector-select');
+            if (!select) return;
+            const index = parseInt(select.value, 10);
+            if (index >= 0 && index < tempSectores.length) {
+                if (tempSectores[index].polygon.length > 3) {
+                    tempSectores[index].polygon.pop();
+                    loadSectorInEditor(index);
+                } else {
+                    Swal.fire('Atención', 'Un sector debe tener al menos 3 vértices para formar un polígono.', 'warning');
+                }
+            }
+        });
+    }
+
+    const btnNewSector = document.getElementById('btn-editor-new-sector');
+    if (btnNewSector) {
+        btnNewSector.addEventListener('click', () => {
+            const center = editorMap.getCenter();
+            const name = "Nuevo Sector " + (tempSectores.length + 1);
+            const offset = 0.0004;
+            const newSec = {
+                name: name,
+                color: '#3b82f6',
+                polygon: [
+                    [center.lat + offset, center.lng],
+                    [center.lat - offset, center.lng + offset],
+                    [center.lat - offset, center.lng - offset]
+                ]
+            };
+            tempSectores.push(newSec);
+            refreshSectorSelect(tempSectores.length - 1);
+        });
+    }
+
+    const btnDeleteSector = document.getElementById('btn-editor-delete-sector');
+    if (btnDeleteSector) {
+        btnDeleteSector.addEventListener('click', () => {
+            const select = document.getElementById('editor-sector-select');
+            if (!select) return;
+            const index = parseInt(select.value, 10);
+            if (index >= 0 && index < tempSectores.length) {
+                Swal.fire({
+                    title: '¿Eliminar Sector?',
+                    text: `¿Estás seguro de que deseas eliminar el sector "${tempSectores[index].name}"?`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#ef4444',
+                    cancelButtonColor: '#64748b',
+                    confirmButtonText: 'Sí, eliminar',
+                    cancelButtonText: 'Cancelar',
+                    background: 'rgba(15, 23, 42, 0.9)'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        tempSectores.splice(index, 1);
+                        if (tempSectores.length === 0) {
+                            tempSectores.push({
+                                name: "Sector Temporal",
+                                color: "#3b82f6",
+                                polygon: [
+                                    [usmSanJoaquin[0] + 0.0004, usmSanJoaquin[1]],
+                                    [usmSanJoaquin[0] - 0.0004, usmSanJoaquin[1] + 0.0004],
+                                    [usmSanJoaquin[0] - 0.0004, usmSanJoaquin[1] - 0.0004]
+                                ]
+                            });
+                        }
+                        refreshSectorSelect(0);
+                    }
+                });
+            }
+        });
+    }
+
+    const btnSaveAll = document.getElementById('btn-editor-save-all');
+    if (btnSaveAll) {
+        btnSaveAll.addEventListener('click', () => {
+            Swal.fire({
+                title: 'Guardando sectores...',
+                text: 'Sincronizando con Firestore',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            // Firestore no permite "nested arrays" (arreglos dentro de arreglos).
+            // Transformamos el polygon [[lat, lng], ...] a un arreglo de objetos [{lat, lng}, ...]
+            const cleanSectores = tempSectores.map(sec => ({
+                name: sec.name,
+                color: sec.color,
+                polygon: sec.polygon.map(coord => ({ lat: coord[0], lng: coord[1] }))
+            }));
+
+            db.collection("config").doc("map_sectors").set({
+                sectores: cleanSectores
+            }).then(() => {
+                // Al volver a la memoria local, restauramos al formato de arreglo [lat, lng]
+                sectores = cleanSectores.map(sec => ({
+                    name: sec.name,
+                    color: sec.color,
+                    polygon: sec.polygon.map(p => [p.lat, p.lng])
+                }));
+                updateDetectedSector();
+                Swal.close(); // Cerrar el modal de carga antes de mostrar el éxito
+                Swal.fire('Guardado', 'Los sectores del mapa se han actualizado correctamente. Recargando la aplicación...', 'success').then(() => {
+                    location.reload(); // Recargar la página para asegurar refresco de todos los componentes y mapas
+                });
+            }).catch(err => {
+                Swal.close(); // Cerrar el modal de carga antes de mostrar el error
+                console.error("Error al guardar sectores en Firestore:", err);
+                Swal.fire('Error al Guardar', 'No se pudo guardar: ' + err.message + '\n\nVerifica que las reglas de seguridad de Firestore permitan escritura en la colección "config".', 'error');
+            });
+        });
+    }
 });
 
 // --- Welcome Staff Button ---
@@ -388,17 +713,29 @@ if (btnWelcomeStaff) {
                 if (result.value === '6767') section = 'Seguridad';
                 else if (result.value === '6969') section = 'Salud';
                 else if (result.value === '1313') section = 'Equidad de Género';
+                else if (result.value === '1234') section = 'AI-Moderation';
 
                 if (section) {
                     currentStaffCategory = section;
-                    Swal.fire({
-                        title: 'Acceso Concedido',
-                        text: 'Has ingresado como Encargado de ' + section,
-                        icon: 'success',
-                        confirmButtonColor: '#3b82f6',
-                        background: 'rgba(15, 23, 42, 0.9)'
-                    }).then(() => {
-                        navigateTo('page-reports-list');
+                    if (section === 'AI-Moderation') {
+                        Swal.fire({
+                            title: 'Acceso Concedido',
+                            text: 'Panel de Administrador de Reglas de IA',
+                            icon: 'success',
+                            confirmButtonColor: '#3b82f6',
+                            background: 'rgba(15, 23, 42, 0.9)'
+                        }).then(() => {
+                            navigateTo('page-ai-rules');
+                        });
+                    } else {
+                        Swal.fire({
+                            title: 'Acceso Concedido',
+                            text: 'Has ingresado como Encargado de ' + section,
+                            icon: 'success',
+                            confirmButtonColor: '#3b82f6',
+                            background: 'rgba(15, 23, 42, 0.9)'
+                        }).then(() => {
+                            navigateTo('page-reports-list');
                         // Show ALL category buttons but pre-select staff's department
                         document.querySelectorAll('.filter-btn[data-filter-type="category"]').forEach(b => {
                             b.style.display = 'inline-block';
@@ -414,8 +751,9 @@ if (btnWelcomeStaff) {
                         activeCategoryFilter = section;
                         renderFilteredReports();
                     });
-                } else {
-                    Swal.fire({
+                }
+            } else {
+                Swal.fire({
                         title: 'Acceso Denegado',
                         text: 'Contraseña incorrecta.',
                         icon: 'error',
@@ -548,6 +886,139 @@ botonesCategoria.forEach(boton => {
     });
 });
 
+function parsePriority(priorityVal) {
+    if (priorityVal === undefined || priorityVal === null) return 1;
+    if (typeof priorityVal === 'number') {
+        if (priorityVal >= 0 && priorityVal <= 5) return Math.round(priorityVal);
+        return 1;
+    }
+    const str = String(priorityVal).toLowerCase().trim();
+    const digitMatch = str.match(/[0-5]/);
+    if (digitMatch) {
+        return parseInt(digitMatch[0], 10);
+    }
+    if (str.includes('critica') || str.includes('crítica') || str.includes('critico') || str.includes('crítico') || str.includes('urgente') || str.includes('maxima') || str.includes('máxima')) {
+        return 5;
+    }
+    if (str.includes('alta') || str.includes('alto')) {
+        return 4;
+    }
+    if (str.includes('media') || str.includes('medio') || str.includes('moderado')) {
+        return 3;
+    }
+    if (str.includes('baja') || str.includes('bajo')) {
+        if (str.includes('muy')) return 1;
+        return 2;
+    }
+    if (str.includes('eliminar') || str.includes('descartar') || str.includes('descartado') || str.includes('nula') || str.includes('nulo')) {
+        return 0;
+    }
+    return 1;
+}
+
+async function analyzeReportWithAI(commentText) {
+    try {
+        // Cargar las reglas configuradas por el administrador en Firestore
+        let rulesText = `1. Clasifica la prioridad del incidente de 0 a 5 (0 prioridad descartada/nula, 1 muy baja, 5 prioridad crítica). Usa 0 si el reporte no es apropiado o de interés para la comunidad y debe ser descartado/eliminado.\n2. Si el reporte contiene venta de artículos, comida, productos, ofertas comerciales, servicios de pago o publicidad de negocios, indícalo (isSale: true) para que sea eliminado.`;
+        try {
+            const rulesDoc = await db.collection("config").doc("ia_rules").get();
+            if (rulesDoc.exists && rulesDoc.data().rules) {
+                rulesText = rulesDoc.data().rules;
+            }
+        } catch (dbError) {
+            console.warn("No se pudieron cargar las reglas de IA desde Firestore. Usando las por defecto.", dbError);
+        }
+
+        const prompt = `Analiza el siguiente reporte de incidente en un campus universitario: "${commentText}".
+
+Debes evaluar el reporte bajo estas condiciones y reglas específicas definidas por el administrador:
+${rulesText}
+
+Responde estrictamente con un objeto JSON en este formato (sin markdown, bloques de código ni explicaciones adicionales):
+{
+  "priority": <número del 0 al 5 según la clasificación de prioridad>,
+  "isSale": <true si se cumple alguna de las reglas para que el reporte sea eliminado/rechazado (ej. por ser venta), de lo contrario false>
+}`;
+
+        let textResult = "";
+        
+        // 1. Intentar usar Puter AI (Altamente confiable, estable y libre de keys)
+        if (typeof puter !== 'undefined' && puter.ai) {
+            try {
+                console.log("Conectando con Puter AI...");
+                const response = await puter.ai.chat(prompt, { model: 'openai/gpt-4o-mini' });
+                textResult = response.toString();
+                console.log("Respuesta recibida exitosamente desde Puter AI.");
+            } catch (puterError) {
+                console.warn("Fallo al conectar con Puter AI, intentando fallback de Pollinations...", puterError);
+            }
+        }
+        
+        // 2. Fallback: Usar Pollinations AI si Puter no está disponible o falla
+        if (!textResult) {
+            console.log("Conectando con Pollinations AI (Fallback)...");
+            const models = ['openai', 'mistral', 'llama', 'gemini'];
+            let success = false;
+            
+            for (const model of models) {
+                try {
+                    const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}?model=${model}&json=true`);
+                    if (response.ok) {
+                        textResult = await response.text();
+                        if (textResult && textResult.trim().length > 0 && !textResult.includes("Queue full") && !textResult.includes("error")) {
+                            success = true;
+                            console.log(`Fallback exitoso usando Pollinations con modelo: ${model}`);
+                            break;
+                        }
+                    }
+                } catch (fetchErr) {
+                    console.warn(`Error en fallback de Pollinations con modelo ${model}:`, fetchErr);
+                }
+            }
+            
+            if (!success) {
+                throw new Error("No se pudo obtener una respuesta válida de ninguna de las APIs de IA gratuitas.");
+            }
+        }
+        
+        let priorityVal = 1;
+        let isSaleVal = false;
+        
+        try {
+            let cleanText = textResult.trim();
+            // Limpiar marcadores de bloques de código de markdown si existieran
+            cleanText = cleanText.replace(/```json/g, '').replace(/```/g, '').trim();
+            
+            const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                cleanText = jsonMatch[0];
+            }
+            
+            const result = JSON.parse(cleanText);
+            priorityVal = result.priority;
+            isSaleVal = result.isSale;
+        } catch (parseError) {
+            console.warn("Fallo al parsear JSON de la IA, aplicando fallback de regex.", parseError);
+            const priorityMatch = textResult.match(/"priority"\s*:\s*(?:"([^"]+)"|(\d+))/i) || textResult.match(/priority\s*[:=]\s*(\w+)/i);
+            if (priorityMatch) {
+                priorityVal = priorityMatch[1] || priorityMatch[2];
+            }
+            const isSaleMatch = textResult.match(/"isSale"\s*:\s*(true|false)/i) || textResult.match(/isSale\s*[:=]\s*(true|false)/i);
+            if (isSaleMatch) {
+                isSaleVal = isSaleMatch[1].toLowerCase() === 'true';
+            }
+        }
+        
+        return {
+            priority: parsePriority(priorityVal),
+            isSale: !!isSaleVal
+        };
+    } catch (error) {
+        console.error("Error crítico en análisis de IA:", error);
+        return { priority: 1, isSale: false };
+    }
+}
+
 btnEnviar.addEventListener('click', async () => {
     // Validar que la ubicación esté estrictamente dentro del polígono del campus (zona azul)
     if (!isPointInPolygon(currentLat, currentLng, campusCoordinates)) {
@@ -590,27 +1061,61 @@ btnEnviar.addEventListener('click', async () => {
         const activeUser = localStorage.getItem('custom-user-email') || currentUserEmail;
         const activeUserName = localStorage.getItem('custom-user-name') || activeUser.split('@')[0];
 
-        // 3. Guardar en la colección "reportes" de Firestore
-        await db.collection("reportes").add({
+        // 3. Guardar en la colección "reportes" de Firestore (con prioridad inicial 1)
+        const reportRef = await db.collection("reportes").add({
             texto: comentario,
             categoria: categoriaSeleccionada,
             fecha: new Date(),
             fotoUrl: urlDescarga,
             latitud: currentLat,
             longitud: currentLng,
+            sector: getSectorFromCoords(currentLat, currentLng),
             autor: activeUser,
-            autorNombre: activeUserName
+            autorNombre: activeUserName,
+            prioridad: 1
         });
         
+        // --- ANÁLISIS DE IA AUTOMÁTICO Y GRATUITO ---
         Swal.fire({
-            title: '¡Reporte Enviado!',
-            text: 'El aviso y la foto ya están en el sistema.',
-            icon: 'success',
-            confirmButtonColor: '#3b82f6',
-            background: 'rgba(15, 23, 42, 0.9)'
-        }).then(() => {
-            navigateTo('page-reports-list');
+            title: 'Analizando con IA...',
+            text: 'La Inteligencia Artificial está evaluando la prioridad y contenido del reporte...',
+            allowOutsideClick: false,
+            didOpen: () => { Swal.showLoading() }
         });
+        
+        const aiResult = await analyzeReportWithAI(comentario);
+
+        if (aiResult.isSale || aiResult.priority === 0) {
+            // Eliminar de Firestore
+            await db.collection("reportes").doc(reportRef.id).delete();
+
+            Swal.fire({
+                title: 'Eliminado por la IA',
+                text: aiResult.isSale 
+                    ? 'El reporte ha sido eliminado automáticamente por la IA de SafeUSM porque detectó que se trata de un anuncio de venta comercial, las cuales no están permitidas.'
+                    : 'El reporte ha sido eliminado automáticamente por la IA de SafeUSM porque se clasificó con prioridad/clasificación 0.',
+                icon: 'warning',
+                confirmButtonColor: '#ef4444',
+                background: 'rgba(15, 23, 42, 0.9)'
+            }).then(() => {
+                navigateTo('page-reports-list');
+            });
+        } else {
+            // Actualizar la prioridad asignada
+            await db.collection("reportes").doc(reportRef.id).update({
+                prioridad: aiResult.priority
+            });
+
+            Swal.fire({
+                title: '¡Reporte Enviado!',
+                text: `El aviso ya está en el sistema. Prioridad asignada por la IA: ${aiResult.priority}/5.`,
+                icon: 'success',
+                confirmButtonColor: '#3b82f6',
+                background: 'rgba(15, 23, 42, 0.9)'
+            }).then(() => {
+                navigateTo('page-reports-list');
+            });
+        }
         
         // Limpiamos los campos
         inputComentario.value = "";
@@ -751,8 +1256,14 @@ function renderFilteredReports() {
                 className: className
             }).addTo(globalMap);
             
+            const priority = reporte.prioridad !== undefined ? reporte.prioridad : 1;
+            const sectorName = reporte.sector || getSectorFromCoords(reporte.latitud, reporte.longitud) || 'Patios y Áreas Verdes';
             let popupContent = `<h3>${reporte.categoria}</h3>
+                                <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 5px; font-weight: 600;">📍 Sector: ${sectorName}</div>
                                 <p>${reporte.texto}</p>
+                                <div style="margin-top: 5px; font-size: 0.85rem; color: #a5b4fc; font-weight: 600;">
+                                    🤖 Prioridad IA: ${priority}/5
+                                </div>
                                 <div style="margin-top: 5px; font-weight: bold; color: ${confirmations >= 5 ? '#ef4444' : '#60a5fa'}">
                                     🔥 ${confirmations} Confirmaciones
                                 </div>`;
@@ -777,16 +1288,36 @@ function renderFilteredReports() {
             tarjeta.style.boxShadow = "0 0 15px rgba(239, 68, 68, 0.2)";
         }
 
-        let ubicacionTexto = reporte.latitud ? "📌 Ubicación Adjunta" : "📍 Sin ubicación";
+        const sectorName = reporte.sector || getSectorFromCoords(reporte.latitud, reporte.longitud) || 'Patios y Áreas Verdes';
+        let ubicacionTexto = reporte.latitud ? `📍 ${sectorName}` : "📍 Sin ubicación";
         const displayName = reporte.autorNombre || reporte.autor || 'Anónimo';
         let autorHtml = `<div style="color: #64748b; font-size: 0.8em; margin-bottom: 5px;">Reportado por: ${displayName}</div>`;
         let imgHtml = reporte.fotoUrl && reporte.fotoUrl.startsWith("http") ? `<img src="${reporte.fotoUrl}" class="report-img" alt="Foto del reporte">` : '';
 
+        const priority = reporte.prioridad !== undefined ? reporte.prioridad : 1;
+        let priorityBadge = '';
+        if (priority === 5) {
+            priorityBadge = `<span style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 0.65em; padding: 2px 6px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">🚨 Prioridad: 5 (Crítica)</span>`;
+        } else if (priority === 4) {
+            priorityBadge = `<span style="background: rgba(249, 115, 22, 0.15); color: #fb923c; border: 1px solid rgba(249, 115, 22, 0.3); font-size: 0.65em; padding: 2px 6px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">⚠️ Prioridad: 4 (Alta)</span>`;
+        } else if (priority === 3) {
+            priorityBadge = `<span style="background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3); font-size: 0.65em; padding: 2px 6px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">🔔 Prioridad: 3 (Media)</span>`;
+        } else if (priority === 2) {
+            priorityBadge = `<span style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); font-size: 0.65em; padding: 2px 6px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">ℹ️ Prioridad: 2 (Baja)</span>`;
+        } else if (priority === 1) {
+            priorityBadge = `<span style="background: rgba(100, 116, 139, 0.15); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.3); font-size: 0.65em; padding: 2px 6px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">☕ Prioridad: 1 (Muy Baja)</span>`;
+        } else if (priority === 0) {
+            priorityBadge = `<span style="background: rgba(244, 63, 94, 0.15); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.3); font-size: 0.65em; padding: 2px 6px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">🗑️ Prioridad: 0 (Descartado)</span>`;
+        } else {
+            priorityBadge = `<span style="background: rgba(100, 116, 139, 0.15); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.3); font-size: 0.65em; padding: 2px 6px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">☕ Prioridad: 1 (Muy Baja)</span>`;
+        }
+
         tarjeta.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <h3 style="color: white; margin-bottom: 5px; display: inline-flex; align-items: center; gap: 8px;">
+                <h3 style="color: white; margin-bottom: 5px; display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                     ${reporte.categoria}
                     ${confirmations >= 5 ? '<span style="background: var(--danger); color: white; font-size: 0.6em; padding: 2px 6px; border-radius: 4px; font-weight: 700; text-transform: uppercase;">⚠️ CRÍTICO</span>' : ''}
+                    ${priorityBadge}
                 </h3>
                 <small style="color: ${getColor(reporte.categoria)}; font-size: 0.8em; border: 1px solid ${getColor(reporte.categoria)}; padding: 2px 6px; border-radius: 10px;">${ubicacionTexto}</small>
             </div>
@@ -927,6 +1458,10 @@ function renderFilteredReports() {
         const commentForm = tarjeta.querySelector('.comment-form');
         commentForm.addEventListener('submit', (e) => {
             e.preventDefault();
+            
+            const input = commentForm.querySelector('.comment-input');
+            const text = input.value.trim();
+            
             let isOfficial = !!currentStaffCategory;
             let role = isOfficial ? "Encargado de " + currentStaffCategory : "Normal";
             
@@ -936,27 +1471,37 @@ function renderFilteredReports() {
             }
             
             if (isOfficial && !currentStaffCategory) {
-                const selectRole = commentForm.querySelector('.official-select').value;
-                const pin = commentForm.querySelector('.official-pin').value;
+                const selectRole = commentForm.querySelector('.official-select');
+                const pinField = commentForm.querySelector('.official-pin');
                 
-                if (pin !== "1234") {
-                    Swal.fire({
-                        title: 'PIN Incorrecto',
-                        text: 'El PIN de personal oficial ingresado no es válido (Sugerencia: usa 1234).',
-                        icon: 'error',
-                        confirmButtonColor: '#3b82f6',
-                        background: 'rgba(15, 23, 42, 0.9)'
-                    });
-                    return;
+                // Si la interfaz no tiene el select/pin agregado (no staff), caemos a normal.
+                if (selectRole && pinField) {
+                    const selectRoleValue = selectRole.value;
+                    const pin = pinField.value;
+                    
+                    if (pin !== "1234") {
+                        Swal.fire({
+                            title: 'PIN Incorrecto',
+                            text: 'El PIN de personal oficial ingresado no es válido (Sugerencia: usa 1234).',
+                            icon: 'error',
+                            confirmButtonColor: '#3b82f6',
+                            background: 'rgba(15, 23, 42, 0.9)'
+                        });
+                        return;
+                    }
+                    role = selectRoleValue;
+                } else {
+                    isOfficial = false;
+                    role = "Normal";
                 }
-                role = selectRole;
             }
             
             if (text) {
+                const commentAuthor = localStorage.getItem('custom-user-name') || (currentUserEmail || "Anónimo");
                 db.collection("reportes").doc(reporteId).collection("comentarios").add({
                     texto: text,
                     fecha: new Date(),
-                    autor: currentUserEmail || "Anónimo",
+                    autor: commentAuthor,
                     likes: 0,
                     esOficial: isOfficial,
                     rolOficial: role
@@ -1007,10 +1552,11 @@ function renderFilteredReports() {
                         metaBadge = `<span class="official-badge">${emoji} ${commentData.rolOficial}</span>`;
                     }
                     
+                    const displayName = (commentData.autor || 'Anónimo').includes('@') ? commentData.autor.split('@')[0] : (commentData.autor || 'Anónimo');
                     commentDiv.innerHTML = `
                         <div class="comment-content">
                             <div class="comment-meta">
-                                <span class="comment-author">${commentData.autor || 'Anónimo'}</span>
+                                <span class="comment-author">${displayName}</span>
                                 ${metaBadge}
                                 <span class="comment-date">${commentData.fecha ? commentData.fecha.toDate().toLocaleDateString() : ''}</span>
                             </div>
@@ -1298,7 +1844,7 @@ if (btnSettingsTriggers.length > 0 && accessibilityModal) {
 
     accessBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
-            const theme = e.target.getAttribute('data-theme');
+            const theme = btn.getAttribute('data-theme');
             
             if (theme === 'default') {
                 document.documentElement.removeAttribute('data-theme');
@@ -1469,11 +2015,11 @@ if (btnSubmitLogin) {
         }
 
         // Validación de dominio institucional USM
-        const emailRegex = /^[a-zA-Z0-9._%+-]+@(usm\.cl|sansano\.usm\.cl)$/i;
+        const emailRegex = /^[a-zA-Z0-9._%+-]+@(usm\.cl|sansano\.usm\.cl|sansano\.cl)$/i;
         if (!emailRegex.test(email)) {
             Swal.fire({
                 title: 'Correo Inválido',
-                text: 'Debes utilizar un correo institucional de la USM (@usm.cl o @sansano.usm.cl).',
+                text: 'Debes utilizar un correo institucional de la USM (@usm.cl, @sansano.usm.cl o @sansano.cl).',
                 icon: 'error',
                 confirmButtonColor: '#3b82f6',
                 background: 'rgba(15, 23, 42, 0.9)'
@@ -1714,8 +2260,8 @@ if (credentialsContainer) {
 
           // Agregar eventos de mostrar mensajes del usuario
           document.querySelectorAll('.show-messages-btn').forEach(btn => {
-              btn.addEventListener('click', async (e) => {
-                  const email = e.target.getAttribute('data-email');
+              btn.addEventListener('click', async () => {
+                  const email = btn.getAttribute('data-email');
                   
                   Swal.fire({
                       title: 'Cargando mensajes...',
@@ -1753,9 +2299,17 @@ if (credentialsContainer) {
                       docs.forEach(rData => {
                           const rDate = rData.fecha ? new Date(rData.fecha.seconds * 1000).toLocaleString('es-ES') : 'Reciente';
                           messagesHTML += `
-                              <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; border-left: 3px solid var(--accent-color);">
-                                  <div style="font-size: 0.8rem; color: rgba(255,255,255,0.4); margin-bottom: 4px;">📅 ${rDate} - 🏷️ ${rData.categoria}</div>
-                                  <div style="color: #ffffff; font-size: 0.95rem; line-height: 1.4;">${rData.texto}</div>
+                              <div class="user-msg-item" style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; border-left: 3px solid var(--accent-color); display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                                  <div style="flex-grow: 1;">
+                                      <div style="font-size: 0.8rem; color: rgba(255,255,255,0.4); margin-bottom: 4px;">📅 ${rDate} - 🏷️ ${rData.categoria}</div>
+                                      <div style="color: #ffffff; font-size: 0.95rem; line-height: 1.4;">${rData.texto}</div>
+                                  </div>
+                                  <button class="delete-user-msg-btn" data-id="${rData.id}" style="background: transparent; border: 1px solid var(--danger); border-radius: 6px; padding: 6px; color: var(--danger); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" title="Eliminar reporte">
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                          <polyline points="3 6 5 6 21 6"></polyline>
+                                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
+                                      </svg>
+                                  </button>
                               </div>
                           `;
                       });
@@ -1767,7 +2321,50 @@ if (credentialsContainer) {
                           confirmButtonColor: '#3b82f6',
                           confirmButtonText: 'Cerrar',
                           background: 'rgba(15, 23, 42, 0.9)',
-                          width: '500px'
+                          width: '500px',
+                          didOpen: () => {
+                              const modal = Swal.getHtmlContainer();
+                              const deleteButtons = modal.querySelectorAll('.delete-user-msg-btn');
+                              deleteButtons.forEach(delBtn => {
+                                  delBtn.addEventListener('click', () => {
+                                      const reportId = delBtn.getAttribute('data-id');
+                                      
+                                      Swal.fire({
+                                          title: '¿Eliminar este reporte?',
+                                          text: 'Esta acción no se puede deshacer.',
+                                          icon: 'warning',
+                                          showCancelButton: true,
+                                          confirmButtonColor: '#ef4444',
+                                          cancelButtonColor: '#3b82f6',
+                                          confirmButtonText: 'Sí, eliminar',
+                                          cancelButtonText: 'Cancelar',
+                                          background: 'rgba(15, 23, 42, 0.9)'
+                                      }).then(async (result) => {
+                                          if (result.isConfirmed) {
+                                              try {
+                                                  await db.collection("reportes").doc(reportId).delete();
+                                                  
+                                                  Swal.fire({
+                                                      title: 'Eliminado',
+                                                      text: 'El reporte ha sido eliminado.',
+                                                      icon: 'success',
+                                                      background: 'rgba(15, 23, 42, 0.9)',
+                                                      timer: 1500,
+                                                      showConfirmButton: false
+                                                  }).then(() => {
+                                                      const originalBtn = document.querySelector(`.show-messages-btn[data-email="${email}"]`);
+                                                      if (originalBtn) {
+                                                          originalBtn.click();
+                                                      }
+                                                  });
+                                              } catch (error) {
+                                                  Swal.fire('Error', 'No se pudo eliminar: ' + error.message, 'error');
+                                              }
+                                          }
+                                      });
+                                  });
+                              });
+                          }
                       });
 
                   } catch (error) {
@@ -1889,18 +2486,71 @@ function loadUserProfile() {
                                              ? rData.fecha.toDate().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) 
                                              : 'Reciente';
                                          
+                                         const priority = rData.prioridad !== undefined ? rData.prioridad : 1;
+                                         let priorityText = '';
+                                         if (priority === 5) priorityText = '🚨 Crítica';
+                                         else if (priority === 4) priorityText = '⚠️ Alta';
+                                         else if (priority === 3) priorityText = '🔔 Media';
+                                         else if (priority === 2) priorityText = 'ℹ️ Baja';
+                                         else if (priority === 1) priorityText = '☕ Muy Baja';
+                                         else if (priority === 0) priorityText = '🗑️ Descartado';
+                                         else priorityText = '☕ Muy Baja';
+
+                                         const ownSector = rData.sector || (rData.latitud ? getSectorFromCoords(rData.latitud, rData.longitud) : 'Patios y Áreas Verdes');
+
                                          card.innerHTML = `
-                                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                                                 <strong style="color: white; font-size: 0.95rem;">${rData.categoria}</strong>
+                                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 4px;">
+                                                 <strong style="color: white; font-size: 0.95rem;">${rData.categoria} <span style="font-size: 0.75rem; font-weight: 500; color: rgba(255,255,255,0.4); margin-left: 6px;">(IA: ${priorityText})</span></strong>
                                                  <small style="color: rgba(255,255,255,0.4); font-size: 0.75rem;">${dateStr}</small>
                                              </div>
+                                             <div style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 8px; font-weight: 600;">📍 Sector: ${ownSector}</div>
                                              <p style="color: #cbd5e1; font-size: 0.85rem; margin: 0 0 0.75rem 0; line-height: 1.4;">${rData.texto}</p>
-                                             <div style="display: flex; gap: 0.75rem; font-size: 0.75rem; color: var(--text-secondary);">
-                                                 <span>❤️ ${rData.likes || 0} Likes</span>
-                                                 <span>Confirmaciones (${rData.confirmations || 0})</span>
+                                             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                                                 <div style="display: flex; gap: 0.75rem; font-size: 0.75rem; color: var(--text-secondary);">
+                                                     <span>❤️ ${rData.likes || 0} Likes</span>
+                                                     <span>Confirmaciones (${rData.confirmations || 0})</span>
+                                                 </div>
+                                                 <button class="delete-own-report-btn" style="background: transparent; border: 1px solid var(--danger); border-radius: 6px; padding: 4px 8px; color: var(--danger); cursor: pointer; font-size: 0.75rem; display: flex; align-items: center; gap: 4px;">
+                                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                         <polyline points="3 6 5 6 21 6"></polyline>
+                                                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
+                                                     </svg>
+                                                     Eliminar
+                                                 </button>
                                              </div>
                                          `;
                                          myReportsContainer.appendChild(card);
+                                         
+                                         const deleteBtn = card.querySelector('.delete-own-report-btn');
+                                         if (deleteBtn) {
+                                             deleteBtn.addEventListener('click', () => {
+                                                 Swal.fire({
+                                                     title: '¿Eliminar tu reporte?',
+                                                     text: "Esta acción no se puede deshacer.",
+                                                     icon: 'warning',
+                                                     showCancelButton: true,
+                                                     confirmButtonColor: '#ef4444',
+                                                     cancelButtonColor: '#3b82f6',
+                                                     confirmButtonText: 'Sí, eliminar',
+                                                     cancelButtonText: 'Cancelar',
+                                                     background: 'rgba(15, 23, 42, 0.9)'
+                                                 }).then((result) => {
+                                                     if (result.isConfirmed) {
+                                                         db.collection("reportes").doc(rData.id).delete().then(() => {
+                                                             Swal.fire({
+                                                                 title: 'Eliminado',
+                                                                 text: 'Tu reporte ha sido eliminado correctamente.',
+                                                                 icon: 'success',
+                                                                 confirmButtonColor: '#3b82f6',
+                                                                 background: 'rgba(15, 23, 42, 0.9)'
+                                                             });
+                                                         }).catch(error => {
+                                                             Swal.fire('Error', 'No se pudo eliminar el reporte: ' + error.message, 'error');
+                                                         });
+                                                     }
+                                                 });
+                                             });
+                                         }
                                      });
                                  }, error => {
                                      console.error("Error al escuchar reportes propios:", error);
@@ -2135,12 +2785,299 @@ if (btnProfileLogout) {
     btnProfileLogout.addEventListener('click', handleLogout);
 }
 
+// --- LÓGICA DE CONFIGURACIÓN DE REGLAS DE IA (PÁGINA 8) ---
+const textareaAiRules = document.getElementById('ai-custom-rules');
+const btnSaveAiRules = document.getElementById('btn-save-ai-rules');
+const btnBackAiRules = document.getElementById('btn-back-ai-rules');
+
+const DEFAULT_AI_RULES = `1. Clasifica la prioridad del incidente de 1 a 5 (1 prioridad muy baja, 5 prioridad crítica).
+2. Si el reporte contiene venta de artículos, comida, productos, ofertas comerciales, servicios de pago o publicidad de negocios, indícalo (isSale: true) para que sea eliminado.`;
+
+async function loadAiRules() {
+    if (!textareaAiRules) return;
+    
+    textareaAiRules.disabled = true;
+    textareaAiRules.value = "Cargando reglas...";
+    
+    try {
+        const doc = await db.collection("config").doc("ia_rules").get();
+        if (doc.exists && doc.data().rules) {
+            textareaAiRules.value = doc.data().rules;
+        } else {
+            textareaAiRules.value = DEFAULT_AI_RULES;
+        }
+    } catch (error) {
+        console.error("Error al cargar reglas de IA:", error);
+        textareaAiRules.value = DEFAULT_AI_RULES;
+    } finally {
+        textareaAiRules.disabled = false;
+    }
+}
+
+if (btnSaveAiRules) {
+    btnSaveAiRules.addEventListener('click', async () => {
+        const rules = textareaAiRules ? textareaAiRules.value.trim() : '';
+        if (!rules) {
+            Swal.fire('Error', 'Las reglas no pueden estar vacías.', 'warning');
+            return;
+        }
+        
+        btnSaveAiRules.disabled = true;
+        const originalText = btnSaveAiRules.innerHTML;
+        btnSaveAiRules.innerHTML = "<span>Guardando...</span>";
+        
+        try {
+            await db.collection("config").doc("ia_rules").set({
+                rules: rules,
+                ultimaActualizacion: new Date()
+            });
+            
+            Swal.fire({
+                title: 'Reglas Guardadas',
+                text: 'Las nuevas reglas de análisis de IA se han aplicado correctamente.',
+                icon: 'success',
+                confirmButtonColor: '#3b82f6',
+                background: 'rgba(15, 23, 42, 0.9)'
+            });
+        } catch (error) {
+            console.error("Error al guardar reglas de IA:", error);
+            Swal.fire('Error', 'No se pudieron guardar las reglas: ' + error.message, 'error');
+        } finally {
+            btnSaveAiRules.disabled = false;
+            btnSaveAiRules.innerHTML = originalText;
+        }
+    });
+}
+
+if (btnBackAiRules) {
+    btnBackAiRules.addEventListener('click', () => {
+        navigateTo('page-welcome');
+    });
+}
+
+// --- FUNCIONES DEL EDITOR DE SECTORES ---
+function promptForSectorEditing() {
+    Swal.fire({
+        title: 'Acceso Restringido',
+        text: 'Ingrese la contraseña para configurar los sectores del mapa:',
+        input: 'password',
+        inputAttributes: {
+            autocapitalize: 'off',
+            autocorrect: 'off'
+        },
+        showCancelButton: true,
+        confirmButtonText: 'Entrar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#3b82f6',
+        background: 'rgba(15, 23, 42, 0.9)'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            if (result.value === '1234') {
+                navigateTo('page-edit-map-sectors');
+            } else {
+                Swal.fire({
+                    title: 'Acceso Denegado',
+                    text: 'Contraseña incorrecta.',
+                    icon: 'error',
+                    confirmButtonColor: '#3b82f6',
+                    background: 'rgba(15, 23, 42, 0.9)'
+                });
+            }
+        }
+    });
+}
+
+function setupEditorMap() {
+    if (editorMap) return;
+    editorMap = L.map('editor-map', mapOptions).setView(usmSanJoaquin, 17);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap'
+    }).addTo(editorMap);
+
+    // Dibujar polígono del campus como referencia
+    L.polygon(campusCoordinates, {
+        color: '#3b82f6',
+        fillColor: '#3b82f6',
+        fillOpacity: 0.02,
+        weight: 2,
+        dashArray: '5, 8',
+        interactive: false
+    }).addTo(editorMap);
+}
+
+function loadSectorsInEditorList() {
+    tempSectores = JSON.parse(JSON.stringify(sectores));
+    refreshSectorSelect(0);
+}
+
+function refreshSectorSelect(selectedIndex) {
+    const select = document.getElementById('editor-sector-select');
+    if (!select) return;
+    select.innerHTML = "";
+    tempSectores.forEach((sec, idx) => {
+        const opt = document.createElement('option');
+        opt.value = idx;
+        opt.textContent = sec.name;
+        if (idx === selectedIndex) {
+            opt.selected = true;
+        }
+        select.appendChild(opt);
+    });
+    loadSectorInEditor(selectedIndex);
+}
+
+function loadSectorInEditor(index) {
+    if (!editorMap) setupEditorMap();
+
+    // Limpiar capas previas
+    if (editorPolygon) {
+        editorMap.removeLayer(editorPolygon);
+        editorPolygon = null;
+    }
+    editorMarkers.forEach(m => editorMap.removeLayer(m));
+    editorMarkers = [];
+
+    editorBackgroundPolygons.forEach(p => editorMap.removeLayer(p));
+    editorBackgroundPolygons = [];
+
+    if (tempSectores.length === 0 || index < 0 || index >= tempSectores.length) {
+        return;
+    }
+
+    const currentSector = tempSectores[index];
+
+    // Cargar inputs
+    const nameInput = document.getElementById('editor-sector-name');
+    const colorInput = document.getElementById('editor-sector-color');
+    const colorHexInput = document.getElementById('editor-sector-color-hex');
+
+    if (nameInput) nameInput.value = currentSector.name;
+    if (colorInput) colorInput.value = currentSector.color || '#3b82f6';
+    if (colorHexInput) colorHexInput.value = currentSector.color || '#3b82f6';
+
+    // Dibujar otros sectores de fondo (estáticos)
+    tempSectores.forEach((sec, idx) => {
+        if (idx !== index) {
+            const bgPoly = L.polygon(sec.polygon, {
+                color: sec.color || '#94a3b8',
+                fillColor: sec.color || '#94a3b8',
+                fillOpacity: 0.05,
+                weight: 1.5,
+                dashArray: '3, 6',
+                interactive: false
+            }).addTo(editorMap);
+            editorBackgroundPolygons.push(bgPoly);
+        }
+    });
+
+    // Dibujar el polígono activo para edición
+    editorPolygon = L.polygon(currentSector.polygon, {
+        color: currentSector.color || '#3b82f6',
+        fillColor: currentSector.color || '#3b82f6',
+        fillOpacity: 0.35,
+        weight: 3
+    }).addTo(editorMap);
+
+    // Centrar en el sector si tiene coordenadas
+    if (currentSector.polygon.length > 0) {
+        try {
+            editorMap.fitBounds(editorPolygon.getBounds(), { padding: [30, 30] });
+        } catch (e) {
+            editorMap.setView(usmSanJoaquin, 17);
+        }
+    }
+
+    // Dibujar marcadores arrastrables (Handles) en cada vértice (esquina) del sector
+    currentSector.polygon.forEach((coords, idx) => {
+        const handleIcon = L.divIcon({
+            className: 'custom-vertex-handle',
+            html: `<div style="width: 14px; height: 14px; background-color: #fbbf24; border: 2px solid #ffffff; border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,0.6); cursor: grab;"></div>`,
+            iconSize: [14, 14],
+            iconAnchor: [7, 7]
+        });
+
+        const marker = L.marker(coords, {
+            icon: handleIcon,
+            draggable: true
+        }).addTo(editorMap);
+
+        // Última posición válida (sin superposición)
+        marker._lastValidLatLng = L.latLng(coords[0], coords[1]);
+
+        // Durante el arrastre: bloquear en tiempo real si entra en otro sector
+        marker.on('drag', (e) => {
+            const newPos = marker.getLatLng();
+            
+            // Comprobar si la nueva posición cae dentro de cualquier otro sector
+            let blocked = false;
+            for (let i = 0; i < tempSectores.length; i++) {
+                if (i === index) continue;
+                if (isPointInPolygon(newPos.lat, newPos.lng, tempSectores[i].polygon)) {
+                    blocked = true;
+                    break;
+                }
+            }
+
+            // También comprobar si algún vértice vecino quedaría dentro del polígono editado
+            if (!blocked) {
+                const testPolygon = currentSector.polygon.map((c, ci) => ci === idx ? [newPos.lat, newPos.lng] : c);
+                for (let i = 0; i < tempSectores.length; i++) {
+                    if (i === index) continue;
+                    for (const pt of tempSectores[i].polygon) {
+                        if (isPointInPolygon(pt[0], pt[1], testPolygon)) {
+                            blocked = true;
+                            break;
+                        }
+                    }
+                    if (blocked) break;
+                }
+            }
+
+            if (blocked) {
+                // Devolver el marcador a la última posición válida instantáneamente
+                marker.setLatLng(marker._lastValidLatLng);
+            } else {
+                // Posición válida: actualizar el polígono y guardar como última válida
+                marker._lastValidLatLng = L.latLng(newPos.lat, newPos.lng);
+                currentSector.polygon[idx] = [newPos.lat, newPos.lng];
+                editorPolygon.setLatLngs(currentSector.polygon);
+            }
+        });
+
+        // Al soltar, asegurarse de que la coordenada final es la última válida
+        marker.on('dragend', (e) => {
+            const finalPos = marker._lastValidLatLng;
+            marker.setLatLng(finalPos);
+            currentSector.polygon[idx] = [finalPos.lat, finalPos.lng];
+            editorPolygon.setLatLngs(currentSector.polygon);
+        });
+
+        editorMarkers.push(marker);
+    });
+}
+
+function updateActiveSectorColor(newColor) {
+    const select = document.getElementById('editor-sector-select');
+    if (!select) return;
+    const index = parseInt(select.value, 10);
+    if (index >= 0 && index < tempSectores.length) {
+        tempSectores[index].color = newColor;
+        if (editorPolygon) {
+            editorPolygon.setStyle({
+                color: newColor,
+                fillColor: newColor
+            });
+        }
+    }
+}
+
 // --- INICIALIZACIÓN DE LA APP ---
 window.addEventListener('DOMContentLoaded', () => {
-    // Redirigir a Home (Dashboard) si ya hay sesión iniciada, si no, mantener en Welcome
+    // Redirigir a Home si hay sesión iniciada, si no redirigir a Login Custom inmediatamente
     if (localStorage.getItem('custom-user-email')) {
         navigateTo('page-home');
     } else {
-        navigateTo('page-welcome');
+        navigateTo('page-login-custom');
+        setLoginMode('login');
     }
 });
