@@ -97,7 +97,7 @@ auth.onAuthStateChanged(user => {
 */
 
 // Forzamos el nombre de usuario para que no falle el reporte mientras probamos sin login
-currentUserEmail = "usuario_de_prueba@sansano.usm.cl";
+currentUserEmail = "usuario no registrado";
 
 // --- FUNCIÓN AUXILIAR: PUNTO EN POLÍGONO (Ray-casting Algorithm) ---
 function isPointInPolygon(lat, lng, polygon) {
@@ -218,6 +218,11 @@ let editorMarkers = [];
 let tempSectores = [];
 let editorBackgroundPolygons = [];
 
+// Capas de polígono del campus para actualización dinámica
+let formCampusPolygon = null;
+let globalCampusPolygon = null;
+let editorCampusPolygon = null;
+
 function getSectorFromCoords(lat, lng) {
     for (const sec of sectores) {
         if (isPointInPolygon(lat, lng, sec.polygon)) {
@@ -270,7 +275,7 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r
 }).addTo(formMap);
 
 // Polígono del campus en el mapa del formulario
-L.polygon(campusCoordinates, {
+formCampusPolygon = L.polygon(campusCoordinates, {
     color: '#3b82f6',
     fillColor: '#3b82f6',
     fillOpacity: 0.04,
@@ -349,7 +354,7 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r
 }).addTo(globalMap);
 
 // Polígono del campus en el mapa global
-L.polygon(campusCoordinates, {
+globalCampusPolygon = L.polygon(campusCoordinates, {
     color: '#3b82f6',
     fillColor: '#3b82f6',
     fillOpacity: 0.04,
@@ -861,7 +866,16 @@ if (btnBackLogin) {
     btnBackLogin.addEventListener('click', () => navigateTo('page-welcome'));
 }
 backBtns.forEach(btn => {
-    if (btn.id !== 'btn-back-credentials' && btn.id !== 'btn-back-profile' && btn.id !== 'btn-back-edit-profile' && btn.id !== 'btn-back-login') {
+    // Exclusiones: estos botones ya tienen su propio listener asignado arriba
+    const excluded = [
+        'btn-back-credentials',
+        'btn-back-profile',
+        'btn-back-edit-profile',
+        'btn-back-login',
+        'btn-back-ai-rules',          // Reglas IA → vuelve a page-welcome
+        'btn-back-edit-map-sectors'   // Editor de mapa → ya tiene listener propio
+    ];
+    if (!excluded.includes(btn.id)) {
         btn.addEventListener('click', () => navigateTo('page-home'));
     }
 });
@@ -919,7 +933,7 @@ function parsePriority(priorityVal) {
 async function analyzeReportWithAI(commentText) {
     try {
         // Cargar las reglas configuradas por el administrador en Firestore
-        let rulesText = `1. Clasifica la prioridad del incidente de 0 a 5 (0 prioridad descartada/nula, 1 muy baja, 5 prioridad crítica). Usa 0 si el reporte no es apropiado o de interés para la comunidad y debe ser descartado/eliminado.\n2. Si el reporte contiene venta de artículos, comida, productos, ofertas comerciales, servicios de pago o publicidad de negocios, indícalo (isSale: true) para que sea eliminado.`;
+        let rulesText = DEFAULT_AI_RULES;
         try {
             const rulesDoc = await db.collection("config").doc("ia_rules").get();
             if (rulesDoc.exists && rulesDoc.data().rules) {
@@ -929,16 +943,15 @@ async function analyzeReportWithAI(commentText) {
             console.warn("No se pudieron cargar las reglas de IA desde Firestore. Usando las por defecto.", dbError);
         }
 
-        const prompt = `Analiza el siguiente reporte de incidente en un campus universitario: "${commentText}".
+        const prompt = `Eres el sistema de moderación automática de SafeUSM, una plataforma de reportes de incidentes en campus universitarios.
 
-Debes evaluar el reporte bajo estas condiciones y reglas específicas definidas por el administrador:
+Analiza el siguiente reporte enviado por un usuario: "${commentText}".
+
+Sigue ESTRICTAMENTE este flujo de decisiones y reglas definidas por el administrador:
 ${rulesText}
 
-Responde estrictamente con un objeto JSON en este formato (sin markdown, bloques de código ni explicaciones adicionales):
-{
-  "priority": <número del 0 al 5 según la clasificación de prioridad>,
-  "isSale": <true si se cumple alguna de las reglas para que el reporte sea eliminado/rechazado (ej. por ser venta), de lo contrario false>
-}`;
+IMPORTANTE: Tu respuesta DEBE ser ÚNICAMENTE un objeto JSON válido, sin markdown, sin bloques de código, sin texto adicional antes ni después. Usa exactamente este formato:
+{ "priority": <número 1-5 o null si se elimina>, "accion": "aprobar" | "eliminar", "motivo": "" | "venta" | "inapropiado" }`;
 
         let textResult = "";
         
@@ -982,40 +995,47 @@ Responde estrictamente con un objeto JSON en este formato (sin markdown, bloques
         }
         
         let priorityVal = 1;
-        let isSaleVal = false;
+        let accionVal = 'aprobar';
+        let motivoVal = '';
         
         try {
             let cleanText = textResult.trim();
             // Limpiar marcadores de bloques de código de markdown si existieran
-            cleanText = cleanText.replace(/```json/g, '').replace(/```/g, '').trim();
+            cleanText = cleanText.replace(/```json/gi, '').replace(/```/g, '').trim();
             
-            const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+            const jsonMatch = cleanText.match(/\{[\s\S]*?\}/);
             if (jsonMatch) {
                 cleanText = jsonMatch[0];
             }
             
             const result = JSON.parse(cleanText);
+            // Soporte para el formato nuevo ({ priority, accion, motivo }) y el legado ({ priority, isSale })
+            accionVal = result.accion || (result.isSale ? 'eliminar' : 'aprobar');
+            motivoVal = result.motivo || (result.isSale ? 'venta' : '');
             priorityVal = result.priority;
-            isSaleVal = result.isSale;
         } catch (parseError) {
             console.warn("Fallo al parsear JSON de la IA, aplicando fallback de regex.", parseError);
-            const priorityMatch = textResult.match(/"priority"\s*:\s*(?:"([^"]+)"|(\d+))/i) || textResult.match(/priority\s*[:=]\s*(\w+)/i);
-            if (priorityMatch) {
-                priorityVal = priorityMatch[1] || priorityMatch[2];
-            }
-            const isSaleMatch = textResult.match(/"isSale"\s*:\s*(true|false)/i) || textResult.match(/isSale\s*[:=]\s*(true|false)/i);
-            if (isSaleMatch) {
-                isSaleVal = isSaleMatch[1].toLowerCase() === 'true';
-            }
+            const priorityMatch = textResult.match(/"priority"\s*:\s*(?:"([^"]+)"|(\d+)|null)/i);
+            if (priorityMatch) priorityVal = priorityMatch[1] || priorityMatch[2] || null;
+            const accionMatch = textResult.match(/"accion"\s*:\s*"(aprobar|eliminar)"/i);
+            if (accionMatch) accionVal = accionMatch[1];
+            const motivoMatch = textResult.match(/"motivo"\s*:\s*"([^"]*)"/i);
+            if (motivoMatch) motivoVal = motivoMatch[1];
+            // Compatibilidad con formato legado
+            const isSaleMatch = textResult.match(/"isSale"\s*:\s*(true|false)/i);
+            if (isSaleMatch && isSaleMatch[1] === 'true') { accionVal = 'eliminar'; motivoVal = 'venta'; }
         }
         
         return {
-            priority: parsePriority(priorityVal),
-            isSale: !!isSaleVal
+            priority: accionVal === 'eliminar' ? null : parsePriority(priorityVal),
+            isSale: motivoVal === 'venta',
+            isInappropriate: motivoVal === 'inapropiado',
+            accion: accionVal,
+            motivo: motivoVal
         };
     } catch (error) {
         console.error("Error crítico en análisis de IA:", error);
-        return { priority: 1, isSale: false };
+        return { priority: 1, isSale: false, isInappropriate: false, accion: 'aprobar', motivo: '' };
     }
 }
 
@@ -1082,33 +1102,55 @@ btnEnviar.addEventListener('click', async () => {
             allowOutsideClick: false,
             didOpen: () => { Swal.showLoading() }
         });
+
+        // Autenticar de forma invisible con Puter usando un usuario temporal anónimo.
+        // Esto permite que Puter AI funcione sin requerir inicio de sesión del usuario.
+        try {
+            if (typeof puter !== 'undefined' && puter.auth) {
+                await puter.auth.signIn({ attempt_temp_user_creation: true });
+            }
+        } catch (puterAuthErr) {
+            console.warn('Puter auth silenciosa falló, se intentará con Pollinations como fallback:', puterAuthErr);
+        }
         
         const aiResult = await analyzeReportWithAI(comentario);
 
-        if (aiResult.isSale || aiResult.priority === 0) {
+        if (aiResult.accion === 'eliminar' || aiResult.priority === null) {
             // Eliminar de Firestore
             await db.collection("reportes").doc(reportRef.id).delete();
 
+            let elimTitle = 'Reporte Eliminado por la IA';
+            let elimText = 'Tu reporte fue eliminado automáticamente por el sistema de moderación de SafeUSM.';
+
+            if (aiResult.motivo === 'venta' || aiResult.isSale) {
+                elimTitle = '🛑 Publicación Eliminada — Venta/Spam Detectada';
+                elimText = 'Tu publicación fue eliminada porque no se permiten las ventas ni el spam comercial en esta plataforma. Los reportes deben ser incidentes reales del campus.';
+            } else if (aiResult.motivo === 'inapropiado' || aiResult.isInappropriate) {
+                elimTitle = '🚫 Contenido Eliminado — Normas Comunitarias';
+                elimText = 'Tu contenido ha sido eliminado por infringir nuestras normas comunitarias. Los reportes que contienen lenguaje inapropiado, violencia gráfica o acoso están estrictamente prohibidos.';
+            }
+
             Swal.fire({
-                title: 'Eliminado por la IA',
-                text: aiResult.isSale 
-                    ? 'El reporte ha sido eliminado automáticamente por la IA de SafeUSM porque detectó que se trata de un anuncio de venta comercial, las cuales no están permitidas.'
-                    : 'El reporte ha sido eliminado automáticamente por la IA de SafeUSM porque se clasificó con prioridad/clasificación 0.',
+                title: elimTitle,
+                text: elimText,
                 icon: 'warning',
                 confirmButtonColor: '#ef4444',
                 background: 'rgba(15, 23, 42, 0.9)'
             }).then(() => {
-                navigateTo('page-reports-list');
+                navigateTo('page-home');
             });
         } else {
-            // Actualizar la prioridad asignada
+            // Actualizar la prioridad asignada por la IA
             await db.collection("reportes").doc(reportRef.id).update({
                 prioridad: aiResult.priority
             });
 
+            const priorityLabels = { 1: 'Muy Baja', 2: 'Baja', 3: 'Media', 4: 'Alta', 5: 'Crítica' };
+            const label = priorityLabels[aiResult.priority] || 'Normal';
+
             Swal.fire({
-                title: '¡Reporte Enviado!',
-                text: `El aviso ya está en el sistema. Prioridad asignada por la IA: ${aiResult.priority}/5.`,
+                title: '✅ Reporte Publicado',
+                html: `Tu incidente ya está registrado en el sistema.<br><br><strong>Prioridad asignada por IA: ${aiResult.priority}/5 (${label})</strong>`,
                 icon: 'success',
                 confirmButtonColor: '#3b82f6',
                 background: 'rgba(15, 23, 42, 0.9)'
@@ -2790,8 +2832,29 @@ const textareaAiRules = document.getElementById('ai-custom-rules');
 const btnSaveAiRules = document.getElementById('btn-save-ai-rules');
 const btnBackAiRules = document.getElementById('btn-back-ai-rules');
 
-const DEFAULT_AI_RULES = `1. Clasifica la prioridad del incidente de 1 a 5 (1 prioridad muy baja, 5 prioridad crítica).
-2. Si el reporte contiene venta de artículos, comida, productos, ofertas comerciales, servicios de pago o publicidad de negocios, indícalo (isSale: true) para que sea eliminado.`;
+const DEFAULT_AI_RULES = `SISTEMA DE REGLAS PARA MODERACIÓN Y PRIORIZACIÓN DE REPORTES EN CAMPUS UNIVERSITARIO
+
+=== PASO 1: FILTROS DE ELIMINACIÓN AUTOMÁTICA (PRIORIDAD MÁXIMA) ===
+Antes de asignar prioridad, verifica si el contenido activa alguna de estas reglas de bloqueo:
+
+REGLA A - VENTAS Y SPAM COMERCIAL:
+Eliminar si el texto incluye: ofertas de productos o servicios, enlaces de afiliados, códigos de descuento personales, solicitudes de dinero, precios de artículos, publicidad de negocios, palabras clave como "vendo", "compro", "disponible al por mayor", "interesados al DM", "oferta", "precio", "descuento", "WhatsApp para más info".
+Acción: { "priority": null, "accion": "eliminar", "motivo": "venta" }
+
+REGLA B - CONTENIDO INAPROPIADO (Desnudez, Violencia, Acoso):
+Eliminar si la descripción textual menciona: desnudez total o parcial, pornografía, insinuaciones sexuales explícitas, violencia gráfica, discursos de odio, acoso, amenazas físicas o discriminación.
+Acción: { "priority": null, "accion": "eliminar", "motivo": "inapropiado" }
+
+=== PASO 2: MATRIZ DE PRIORIDADES (si no aplican los filtros anteriores) ===
+Asigna una prioridad del 1 al 5 según el impacto del incidente en la comunidad universitaria:
+
+Prioridad 1 (Muy Baja): Contenido trivial, saludos, agradecimientos, charlas casuales sin acción requerida.
+Prioridad 2 (Baja): Consultas generales, preguntas frecuentes, comentarios informativos comunes.
+Prioridad 3 (Media): Reportes de fallos menores del entorno (una luz quemada, una silla rota), sugerencias de mejora, dudas técnicas.
+Prioridad 4 (Alta): Problemas que afectan a varios usuarios (acceso bloqueado, infraestructura dañada, peleas sin violencia inmediata, acoso verbal).
+Prioridad 5 (Muy Alta / Crítica): Emergencias de seguridad (incendio, pelea con violencia física, robo, accidente, persona desmayada, amenaza de seguridad), situaciones que requieren atención humana inmediata.
+
+Acción para contenido aprobado: { "priority": <1-5>, "accion": "aprobar", "motivo": "" }`;
 
 async function loadAiRules() {
     if (!textareaAiRules) return;
@@ -2895,7 +2958,7 @@ function setupEditorMap() {
     }).addTo(editorMap);
 
     // Dibujar polígono del campus como referencia
-    L.polygon(campusCoordinates, {
+    editorCampusPolygon = L.polygon(campusCoordinates, {
         color: '#3b82f6',
         fillColor: '#3b82f6',
         fillOpacity: 0.02,
@@ -3071,13 +3134,258 @@ function updateActiveSectorColor(newColor) {
     }
 }
 
+// --- EDITOR DE PERÍMETRO EXTERIOR DEL CAMPUS ---
+let isEditingPerimeter = false;
+let perimeterHandles = [];        // Marcadores arrastrables del perímetro
+let perimeterPolygonLayer = null; // Capa del polígono del perímetro en el editor
+let tempCampusCoords = [];        // Copia temporal de campusCoordinates para editar
+
+function enterPerimeterEditMode() {
+    if (!editorMap) setupEditorMap();
+
+    // Limpiar estado del editor de sectores (quitar handles de sectores)
+    if (editorPolygon) { editorMap.removeLayer(editorPolygon); editorPolygon = null; }
+    editorMarkers.forEach(m => editorMap.removeLayer(m));
+    editorMarkers = [];
+    editorBackgroundPolygons.forEach(p => editorMap.removeLayer(p));
+    editorBackgroundPolygons = [];
+
+    // Ocultar controles de sectores mientras se edita el perímetro
+    const sectorControls = document.getElementById('editor-sector-select');
+    if (sectorControls) sectorControls.closest('div[style]').style.opacity = '0.4';
+
+    // Copiar coordenadas actuales para edición temporal
+    tempCampusCoords = campusCoordinates.map(c => [...c]);
+
+    // Dibujar polígono del perímetro editable (morado)
+    if (perimeterPolygonLayer) editorMap.removeLayer(perimeterPolygonLayer);
+    perimeterPolygonLayer = L.polygon(tempCampusCoords, {
+        color: '#8b5cf6',
+        fillColor: '#8b5cf6',
+        fillOpacity: 0.12,
+        weight: 3,
+        dashArray: null
+    }).addTo(editorMap);
+
+    // Centrar mapa en el perímetro
+    try { editorMap.fitBounds(perimeterPolygonLayer.getBounds(), { padding: [30, 30] }); }
+    catch(e) { editorMap.setView(usmSanJoaquin, 17); }
+
+    renderPerimeterHandles();
+
+    // Mostrar botones de perímetro
+    document.getElementById('btn-editor-add-perimeter-vertex').style.display = '';
+    document.getElementById('btn-editor-delete-perimeter-vertex').style.display = '';
+    document.getElementById('btn-editor-save-perimeter').style.display = '';
+    document.getElementById('perimeter-editor-tip').style.display = '';
+    document.getElementById('btn-editor-edit-perimeter').textContent = '🚫 Salir del Editor de Perímetro';
+    document.getElementById('btn-editor-edit-perimeter').style.background = 'rgba(239,68,68,0.1)';
+    document.getElementById('btn-editor-edit-perimeter').style.borderColor = 'rgba(239,68,68,0.3)';
+    document.getElementById('btn-editor-edit-perimeter').style.color = '#f87171';
+
+    isEditingPerimeter = true;
+}
+
+function exitPerimeterEditMode() {
+    // Limpiar handles del perímetro
+    perimeterHandles.forEach(m => editorMap.removeLayer(m));
+    perimeterHandles = [];
+
+    // Quitar polígono temporal
+    if (perimeterPolygonLayer) { editorMap.removeLayer(perimeterPolygonLayer); perimeterPolygonLayer = null; }
+
+    // Restaurar opacidad de controles de sectores
+    const sectorControls = document.getElementById('editor-sector-select');
+    if (sectorControls) sectorControls.closest('div[style]').style.opacity = '1';
+
+    // Ocultar botones de perímetro
+    document.getElementById('btn-editor-add-perimeter-vertex').style.display = 'none';
+    document.getElementById('btn-editor-delete-perimeter-vertex').style.display = 'none';
+    document.getElementById('btn-editor-save-perimeter').style.display = 'none';
+    document.getElementById('perimeter-editor-tip').style.display = 'none';
+    document.getElementById('btn-editor-edit-perimeter').textContent = '🗺️ Editar Perímetro Exterior';
+    document.getElementById('btn-editor-edit-perimeter').style.background = 'rgba(139, 92, 246, 0.15)';
+    document.getElementById('btn-editor-edit-perimeter').style.borderColor = 'rgba(139, 92, 246, 0.4)';
+    document.getElementById('btn-editor-edit-perimeter').style.color = '#a78bfa';
+
+    isEditingPerimeter = false;
+
+    // Recargar sector editor
+    loadSectorsInEditorList();
+}
+
+function renderPerimeterHandles() {
+    // Limpiar handles anteriores
+    perimeterHandles.forEach(m => editorMap.removeLayer(m));
+    perimeterHandles = [];
+
+    tempCampusCoords.forEach((coords, idx) => {
+        const handleIcon = L.divIcon({
+            className: '',
+            html: `<div style="width:16px;height:16px;background:#8b5cf6;border:2px solid #fff;border-radius:50%;box-shadow:0 2px 8px rgba(139,92,246,0.7);cursor:grab;"></div>`,
+            iconSize: [16, 16],
+            iconAnchor: [8, 8]
+        });
+
+        const marker = L.marker([coords[0], coords[1]], {
+            icon: handleIcon,
+            draggable: true
+        }).addTo(editorMap);
+
+        marker.on('drag', () => {
+            const pos = marker.getLatLng();
+            tempCampusCoords[idx] = [pos.lat, pos.lng];
+            perimeterPolygonLayer.setLatLngs(tempCampusCoords);
+        });
+
+        marker.on('dragend', () => {
+            const pos = marker.getLatLng();
+            tempCampusCoords[idx] = [pos.lat, pos.lng];
+            perimeterPolygonLayer.setLatLngs(tempCampusCoords);
+        });
+
+        perimeterHandles.push(marker);
+    });
+}
+
+// Botón: Activar/Desactivar editor de perímetro
+const btnEditPerimeter = document.getElementById('btn-editor-edit-perimeter');
+if (btnEditPerimeter) {
+    btnEditPerimeter.addEventListener('click', () => {
+        if (isEditingPerimeter) {
+            exitPerimeterEditMode();
+        } else {
+            enterPerimeterEditMode();
+        }
+    });
+}
+
+// Botón: Añadir vértice al perímetro (lo inserta en el centro del mapa)
+const btnAddPerimeterVertex = document.getElementById('btn-editor-add-perimeter-vertex');
+if (btnAddPerimeterVertex) {
+    btnAddPerimeterVertex.addEventListener('click', () => {
+        if (!isEditingPerimeter) return;
+        const center = editorMap.getCenter();
+        tempCampusCoords.push([center.lat, center.lng]);
+        perimeterPolygonLayer.setLatLngs(tempCampusCoords);
+        renderPerimeterHandles();
+    });
+}
+
+// Botón: Quitar último vértice del perímetro
+const btnDeletePerimeterVertex = document.getElementById('btn-editor-delete-perimeter-vertex');
+if (btnDeletePerimeterVertex) {
+    btnDeletePerimeterVertex.addEventListener('click', () => {
+        if (!isEditingPerimeter || tempCampusCoords.length <= 3) {
+            Swal.fire({ title: 'Mínimo 3 vértices', text: 'El perímetro necesita al menos 3 puntos.', icon: 'warning', background: 'rgba(15,23,42,0.9)', confirmButtonColor: '#8b5cf6' });
+            return;
+        }
+        tempCampusCoords.pop();
+        perimeterPolygonLayer.setLatLngs(tempCampusCoords);
+        renderPerimeterHandles();
+    });
+}
+
+// Botón: Guardar perímetro en Firestore y aplicar en tiempo real
+const btnSavePerimeter = document.getElementById('btn-editor-save-perimeter');
+if (btnSavePerimeter) {
+    btnSavePerimeter.addEventListener('click', async () => {
+        if (!isEditingPerimeter || !perimeterPolygonLayer) return;
+
+        btnSavePerimeter.disabled = true;
+        btnSavePerimeter.innerHTML = '<span>Guardando...</span>';
+
+        try {
+            // Obtener las coordenadas directamente desde la capa de Leaflet.
+            // getLatLngs() devuelve [[LatLng, LatLng, ...]] para polígonos simples.
+            // Aplanamos el primer nivel y extraemos únicamente lat y lng como números primitivos
+            // para que Firestore no reciba arreglos anidados ni objetos con métodos.
+            const rawLatLngs = perimeterPolygonLayer.getLatLngs();
+
+            // Aplanar recursivamente hasta llegar a objetos LatLng con .lat y .lng numéricos
+            const cleanCoords = [];
+            function flattenLatLngs(arr) {
+                arr.forEach(item => {
+                    if (Array.isArray(item)) {
+                        flattenLatLngs(item);
+                    } else if (item && typeof item.lat === 'number' && typeof item.lng === 'number') {
+                        cleanCoords.push({ lat: item.lat, lng: item.lng });
+                    }
+                });
+            }
+            flattenLatLngs(rawLatLngs);
+
+            if (cleanCoords.length < 3) {
+                throw new Error('No se encontraron suficientes vértices en el polígono del perímetro.');
+            }
+
+            // Guardar en Firestore como arreglo de objetos planos (sin arreglos anidados)
+            await db.collection('config').doc('campus_perimeter').set({
+                coordinates: cleanCoords,
+                updatedAt: new Date()
+            });
+
+            // Actualizar campusCoordinates en memoria con arreglos [lat, lng] para Leaflet interno
+            campusCoordinates.length = 0;
+            cleanCoords.forEach(c => campusCoordinates.push([c.lat, c.lng]));
+
+            // Actualizar también tempCampusCoords para consistencia
+            tempCampusCoords.length = 0;
+            campusCoordinates.forEach(c => tempCampusCoords.push([...c]));
+
+            // Actualizar dinámicamente las capas de polígono en los mapas
+            if (formCampusPolygon) formCampusPolygon.setLatLngs(campusCoordinates);
+            if (globalCampusPolygon) globalCampusPolygon.setLatLngs(campusCoordinates);
+            if (editorCampusPolygon) editorCampusPolygon.setLatLngs(campusCoordinates);
+
+            Swal.fire({
+                title: '✅ Perímetro Guardado',
+                text: 'El nuevo límite del campus ha sido aplicado. Los reportes solo se podrán publicar dentro del área definida.',
+                icon: 'success',
+                confirmButtonColor: '#8b5cf6',
+                background: 'rgba(15, 23, 42, 0.9)'
+            });
+
+            exitPerimeterEditMode();
+        } catch (error) {
+            console.error('Error al guardar perímetro:', error);
+            Swal.fire({ title: 'Error', text: 'No se pudo guardar el perímetro: ' + error.message, icon: 'error', background: 'rgba(15,23,42,0.9)' });
+        } finally {
+            btnSavePerimeter.disabled = false;
+            btnSavePerimeter.innerHTML = '💾 Guardar Perímetro';
+        }
+    });
+}
+
+// Al iniciar la app, cargar el perímetro guardado en Firestore si existe
+async function loadSavedPerimeter() {
+    try {
+        const doc = await db.collection('config').doc('campus_perimeter').get();
+        if (doc.exists && doc.data().coordinates && doc.data().coordinates.length >= 3) {
+            const saved = doc.data().coordinates;
+            campusCoordinates.length = 0;
+            saved.forEach(c => {
+                if (Array.isArray(c)) {
+                    campusCoordinates.push(c);
+                } else if (c && typeof c.lat === 'number' && typeof c.lng === 'number') {
+                    campusCoordinates.push([c.lat, c.lng]);
+                }
+            });
+            console.log(`Perímetro del campus cargado desde Firestore (${campusCoordinates.length} vértices).`);
+            
+            // Actualizar dinámicamente las capas de polígono en los mapas si ya están instanciadas
+            if (formCampusPolygon) formCampusPolygon.setLatLngs(campusCoordinates);
+            if (globalCampusPolygon) globalCampusPolygon.setLatLngs(campusCoordinates);
+            if (editorCampusPolygon) editorCampusPolygon.setLatLngs(campusCoordinates);
+        }
+    } catch (e) {
+        console.warn('No se pudo cargar el perímetro desde Firestore, usando el por defecto.', e);
+    }
+}
+loadSavedPerimeter();
+
 // --- INICIALIZACIÓN DE LA APP ---
 window.addEventListener('DOMContentLoaded', () => {
-    // Redirigir a Home si hay sesión iniciada, si no redirigir a Login Custom inmediatamente
-    if (localStorage.getItem('custom-user-email')) {
-        navigateTo('page-home');
-    } else {
-        navigateTo('page-login-custom');
-        setLoginMode('login');
-    }
+    // Siempre mostrar la pantalla de bienvenida con el logo al cargar
+    navigateTo('page-welcome');
 });
