@@ -178,6 +178,15 @@
                 <p id="user-email">Cargando usuario...</p>
                 <button id="btn-logout" class="logout-btn">Cerrar Sesión</button>
             </div>
+            
+            <!-- INICIALIZACIÓN DE LA APP -->
+            <script>
+            window.addEventListener('DOMContentLoaded', () => {
+                // Siempre mostrar la pantalla de bienvenida con el logo al cargar
+                // (El usuario decide si entrar con cuenta o como invitado)
+                navigateTo('page-welcome');
+            });
+            </script>
 
             <div id="upload-container" class="upload-container" style="width: 100%;">
                 <!-- Botones de Foto: Cámara + Galería -->
@@ -604,23 +613,102 @@
                     <h2>Reglas de IA</h2>
                     <p>Condiciones de moderación</p>
                 </div>
-                <div class="header-actions">
-                    <!-- Espacio para cuadrar el grid del header -->
-                </div>
+                <div class="header-actions"></div>
             </div>
 
-            <div class="ai-rules-container" style="width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 1.5rem; margin: 0 auto 2rem auto;">
-                <div class="glass-panel" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; border-radius: 20px; width: 100%;">
-                    <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.4; text-align: left; margin-bottom: 0.5rem;">
-                        Define aquí las reglas personalizadas que la Inteligencia Artificial utilizará para analizar, clasificar y moderar los reportes en tiempo real. 
-                    </p>
-                    
-                    <div class="input-group">
-                        <p class="section-label" style="text-align: left; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 600;">Instrucciones para la IA:</p>
-                        <textarea id="ai-custom-rules" class="input-field" style="min-height: 180px; font-family: inherit; font-size: 0.95rem; line-height: 1.5;" placeholder="Escribe aquí las instrucciones de análisis y moderación..."></textarea>
+            <div style="width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 1.5rem; margin: 0 auto 2rem auto;">
+
+                <!-- BLOQUE 1: DIAGRAMA DE FLUJO VISUAL -->
+                <div class="glass-panel ai-flow-panel">
+                    <div class="ai-flow-header">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        <span>Flujo de Moderación Automática</span>
                     </div>
 
-                    <button id="btn-save-ai-rules" class="send-btn" style="margin-top: 0.5rem; width: 100%;">
+                    <div class="flow-node flow-node-start">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        Nuevo Reporte Recibido
+                    </div>
+                    <div class="flow-arrow">↓</div>
+
+                    <div class="flow-check-row">
+                        <div class="flow-node flow-node-check">
+                            <span class="flow-check-icon">🚨</span>
+                            ¿Desnudez / Violencia / Acoso?
+                        </div>
+                        <div class="flow-branch">
+                            <div class="flow-branch-yes">SÍ →</div>
+                            <div class="flow-node flow-node-delete">
+                                🚫 ELIMINAR<br>
+                                <span class="flow-node-sub">Normas comunitarias</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flow-branch-no-label">NO ↓</div>
+
+                    <div class="flow-check-row">
+                        <div class="flow-node flow-node-check">
+                            <span class="flow-check-icon">💰</span>
+                            ¿Venta / Spam Comercial?
+                        </div>
+                        <div class="flow-branch">
+                            <div class="flow-branch-yes">SÍ →</div>
+                            <div class="flow-node flow-node-delete">
+                                🛑 ELIMINAR<br>
+                                <span class="flow-node-sub">Publicidad no permitida</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flow-branch-no-label">NO ↓</div>
+
+                    <div class="flow-node flow-node-eval">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                        Evaluar Contenido → Asignar Prioridad
+                    </div>
+                    <div class="flow-arrow">↓</div>
+
+                    <div class="flow-priority-grid">
+                        <div class="flow-priority-item flow-p1">
+                            <span class="flow-p-badge">P1</span>
+                            <span class="flow-p-label">Muy Baja</span>
+                            <span class="flow-p-desc">Charla casual</span>
+                        </div>
+                        <div class="flow-priority-item flow-p2">
+                            <span class="flow-p-badge">P2</span>
+                            <span class="flow-p-label">Baja</span>
+                            <span class="flow-p-desc">Consultas / FAQ</span>
+                        </div>
+                        <div class="flow-priority-item flow-p3">
+                            <span class="flow-p-badge">P3</span>
+                            <span class="flow-p-label">Media</span>
+                            <span class="flow-p-desc">Fallo menor</span>
+                        </div>
+                        <div class="flow-priority-item flow-p4">
+                            <span class="flow-p-badge">P4</span>
+                            <span class="flow-p-label">Alta</span>
+                            <span class="flow-p-desc">Fallo grave</span>
+                        </div>
+                        <div class="flow-priority-item flow-p5">
+                            <span class="flow-p-badge">P5</span>
+                            <span class="flow-p-label">Crítica</span>
+                            <span class="flow-p-desc">Emergencia</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BLOQUE 2: EDITOR DE INSTRUCCIONES PERSONALIZADAS -->
+                <div class="glass-panel" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; border-radius: 20px; width: 100%;">
+                    <div style="display: flex; align-items: center; gap: 0.6rem;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        <p style="color: var(--text-primary); font-weight: 600; font-size: 1rem; margin: 0;">Instrucciones Personalizadas para la IA</p>
+                    </div>
+                    <p style="color: var(--text-secondary); font-size: 0.88rem; line-height: 1.5; margin: 0;">
+                        Edita las instrucciones que la IA usará para analizar y clasificar cada reporte. Los cambios se aplican a todos los nuevos reportes.
+                    </p>
+                    <div class="input-group">
+                        <textarea id="ai-custom-rules" class="input-field" style="min-height: 200px; font-family: 'Courier New', monospace; font-size: 0.82rem; line-height: 1.6;" placeholder="Escribe aquí las instrucciones de análisis y moderación..."></textarea>
+                    </div>
+                    <button id="btn-save-ai-rules" class="send-btn" style="margin-top: 0.25rem; width: 100%;">
                         <span>Guardar Configuración</span>
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 6px;">
                             <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
@@ -631,6 +719,7 @@
                 </div>
             </div>
         </div>
+
 
         <!-- PÁGINA 9: EDITOR VISUAL DE SECTORES DEL MAPA -->
         <div id="page-edit-map-sectors" class="glass-panel page-view" style="display: none; width: 100%; max-width: 800px;">
@@ -691,6 +780,31 @@
                             Eliminar Sector
                         </button>
                     </div>
+
+                    <!-- Separador de sección -->
+                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem;">
+                        <div style="flex: 1; height: 1px; background: var(--panel-border);"></div>
+                        <span style="font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap;">Perímetro del Campus</span>
+                        <div style="flex: 1; height: 1px; background: var(--panel-border);"></div>
+                    </div>
+
+                    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; width: 100%; justify-content: center;">
+                        <button type="button" id="btn-editor-edit-perimeter" class="cat-btn" style="background: rgba(139, 92, 246, 0.15); border-color: rgba(139, 92, 246, 0.4); color: #a78bfa;">
+                            🗺️ Editar Perímetro Exterior
+                        </button>
+                        <button type="button" id="btn-editor-add-perimeter-vertex" class="cat-btn" style="display: none; background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3); color: var(--success);">
+                            ➕ Añadir Vértice al Perímetro
+                        </button>
+                        <button type="button" id="btn-editor-delete-perimeter-vertex" class="cat-btn" style="display: none; background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); color: var(--danger);">
+                            Quitar Último Vértice
+                        </button>
+                        <button type="button" id="btn-editor-save-perimeter" class="cat-btn" style="display: none; background: rgba(139, 92, 246, 0.2); border-color: rgba(139, 92, 246, 0.5); color: #c4b5fd; font-weight: 700;">
+                            💾 Guardar Perímetro
+                        </button>
+                    </div>
+                    <p id="perimeter-editor-tip" style="display: none; font-size: 0.82rem; color: #a78bfa; text-align: center; line-height: 1.5; padding: 0.5rem; background: rgba(139,92,246,0.08); border-radius: 10px; border: 1px solid rgba(139,92,246,0.2);">
+                        🟣 <strong>Modo Perímetro activo.</strong> Arrastra los vértices morados para ajustar el borde del campus. Los reportes solo se podrán enviar desde dentro del área definida.
+                    </p>
 
                     <p style="font-size: 0.85rem; color: var(--text-secondary); text-align: center; margin-top: 0.5rem; line-height: 1.5;">
                         💡 <strong>Instrucciones:</strong> Selecciona un sector en la lista superior. Arrastra las manillas circulares amarillas en el mapa para posicionar cada esquina. Usa los botones para agregar vértices, cambiar colores o crear nuevos sectores.
@@ -762,8 +876,10 @@
     </div>
 
     <!-- Puter JS SDK for Free Keyless AI -->
+    <!-- puter.quiet=true suprime el banner publicitario de Puter.js -->
+    <script>var puter = { quiet: true };</script>
     <script src="https://js.puter.com/v2/"></script>
-    <script src="script.js?v=8"></script>
+    <script src="script.js?v=11"></script>
 </body>
 
 </html>
