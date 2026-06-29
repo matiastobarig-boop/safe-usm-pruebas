@@ -2035,3 +2035,302 @@ html[data-theme="low-vision"] .input-field-custom:focus {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
 }
+
+/* ==========================================================================
+   DIAGRAMA DE FLUJO DE MODERACIÓN IA (PÁGINA REGLAS DE IA)
+   ========================================================================== */
+
+/* Panel contenedor del diagrama */
+.ai-flow-panel {
+    padding: 1.5rem 1.25rem;
+    border-radius: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+/* Encabezado del panel */
+.ai-flow-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-primary);
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin-bottom: 1.25rem;
+    width: 100%;
+    letter-spacing: 0.01em;
+}
+
+.ai-flow-header svg {
+    color: var(--purple);
+    flex-shrink: 0;
+}
+
+/* Nodos base */
+.flow-node {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    font-size: 0.84rem;
+    font-weight: 600;
+    padding: 0.6rem 1rem;
+    border-radius: 10px;
+    text-align: center;
+    line-height: 1.3;
+    width: 100%;
+    max-width: 280px;
+    box-sizing: border-box;
+    transition: transform 0.2s ease;
+}
+
+/* Dentro de la fila de decisión, los nodos se adaptan al contenido */
+.flow-check-row .flow-node {
+    width: auto;
+    flex: 1;
+    min-width: 0;
+    max-width: 200px;
+}
+
+/* Nodo de inicio */
+.flow-node-start {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.15));
+    border: 1.5px solid rgba(139, 92, 246, 0.4);
+    color: var(--text-primary);
+}
+
+/* Nodo de pregunta/condición */
+.flow-node-check {
+    background: rgba(250, 204, 21, 0.1);
+    border: 1.5px solid rgba(250, 204, 21, 0.35);
+    color: #fde68a;
+    font-size: 0.82rem;
+}
+
+/* Nodo de eliminación */
+.flow-node-delete {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1.5px solid rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+    font-size: 0.8rem;
+    padding: 0.5rem 0.75rem;
+    max-width: 130px;
+    min-width: 110px;
+    line-height: 1.4;
+}
+
+.flow-node-sub {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 400;
+    opacity: 0.75;
+    margin-top: 0.15rem;
+}
+
+/* Nodo de evaluación */
+.flow-node-eval {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(59, 130, 246, 0.1));
+    border: 1.5px solid rgba(16, 185, 129, 0.3);
+    color: #6ee7b7;
+    font-size: 0.82rem;
+}
+
+/* Flecha vertical */
+.flow-arrow {
+    font-size: 1.2rem;
+    color: var(--text-secondary);
+    opacity: 0.6;
+    line-height: 1;
+    margin: 0.25rem 0;
+    user-select: none;
+}
+
+/* Fila con nodo de decisión + rama de eliminación */
+.flow-check-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    margin: 0.2rem 0;
+}
+
+/* Rama lateral (SÍ → nodo de eliminar) */
+.flow-branch {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-shrink: 0;
+}
+
+.flow-branch-yes {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.1);
+    padding: 0.2rem 0.4rem;
+    border-radius: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Label de rama "NO" (aparece centrado bajo el nodo de decisión) */
+.flow-branch-no-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #86efac;
+    margin: 0.15rem 0;
+    width: 100%;
+    text-align: center;
+    opacity: 0.85;
+    user-select: none;
+}
+
+/* Ícono emoji en nodo de check */
+.flow-check-icon {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+/* Grid de prioridades */
+.flow-priority-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.4rem;
+    width: 100%;
+    margin-top: 0.25rem;
+}
+
+.flow-priority-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.5rem 0.25rem;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    text-align: center;
+    transition: transform 0.2s ease;
+}
+
+.flow-priority-item:hover {
+    transform: translateY(-2px);
+}
+
+.flow-p-badge {
+    font-size: 0.7rem;
+    font-weight: 800;
+    padding: 0.15rem 0.4rem;
+    border-radius: 5px;
+    letter-spacing: 0.03em;
+}
+
+.flow-p-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.flow-p-desc {
+    font-size: 0.6rem;
+    color: var(--text-secondary);
+    line-height: 1.2;
+}
+
+/* Colores por prioridad */
+.flow-p1 { background: rgba(148, 163, 184, 0.1); border-color: rgba(148, 163, 184, 0.2); }
+.flow-p1 .flow-p-badge { background: rgba(148, 163, 184, 0.2); color: #94a3b8; }
+
+.flow-p2 { background: rgba(96, 165, 250, 0.1); border-color: rgba(96, 165, 250, 0.2); }
+.flow-p2 .flow-p-badge { background: rgba(96, 165, 250, 0.2); color: #60a5fa; }
+
+.flow-p3 { background: rgba(250, 204, 21, 0.1); border-color: rgba(250, 204, 21, 0.2); }
+.flow-p3 .flow-p-badge { background: rgba(250, 204, 21, 0.2); color: #facc15; }
+
+.flow-p4 { background: rgba(251, 146, 60, 0.1); border-color: rgba(251, 146, 60, 0.2); }
+.flow-p4 .flow-p-badge { background: rgba(251, 146, 60, 0.2); color: #fb923c; }
+
+.flow-p5 { background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.25); }
+.flow-p5 .flow-p-badge { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+
+/* --- Correcciones de layout para el diagrama de flujo --- */
+
+/* El ai-flow-panel es un glass-panel anidado: sobreescribir el padding por defecto de 3rem */
+.glass-panel.ai-flow-panel {
+    padding: 1.5rem 1.25rem;
+    align-items: center;
+}
+
+/* Asegurar que el wrapper de la página 8 centre correctamente */
+#page-ai-rules {
+    align-items: flex-start;
+}
+
+/* Los nodos dentro del wrapper central deben ocupar el ancho disponible */
+#page-ai-rules .flow-node-start,
+#page-ai-rules .flow-node-eval {
+    width: 100%;
+    max-width: 340px;
+}
+
+/* Responsive: tablet (481px–640px) */
+@media (max-width: 640px) {
+    .flow-priority-grid {
+        grid-template-columns: repeat(5, 1fr);
+        gap: 0.3rem;
+    }
+
+    .flow-p-badge {
+        font-size: 0.65rem;
+        padding: 0.1rem 0.3rem;
+    }
+
+    .flow-p-label {
+        font-size: 0.6rem;
+    }
+
+    .flow-p-desc {
+        font-size: 0.55rem;
+    }
+
+    .flow-node-check {
+        font-size: 0.78rem;
+    }
+}
+
+/* Responsive: móvil pequeño (<420px) — compactar grid de prioridades a 3 columnas */
+@media (max-width: 420px) {
+    .flow-priority-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .flow-node {
+        font-size: 0.76rem;
+        padding: 0.45rem 0.6rem;
+    }
+
+    .flow-check-row {
+        flex-wrap: wrap;
+        gap: 0.3rem;
+    }
+
+    .flow-check-row .flow-node {
+        max-width: 160px;
+    }
+
+    .flow-node-delete {
+        max-width: 110px;
+        min-width: 95px;
+        font-size: 0.72rem;
+    }
+
+    .glass-panel.ai-flow-panel {
+        padding: 1.25rem 0.85rem;
+    }
+}
